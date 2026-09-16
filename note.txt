@@ -1,0 +1,40 @@
+
+python clinical_questions.py
+
+
+streamlit run dashboard_app.py
+
+
+python predictive_models.py
+
+
+
+# 1. Full EDA + charts
+python main_analysis.py
+
+# 2. Answer clinical questions (adds Q1–Q7 charts)
+python clinical_questions.py
+
+# 3. Generate report (HTML + PDF if weasyprint installed)
+python report_generator.py
+
+# 4. Train ML models
+python predictive_models.py
+
+# 5. Launch interactive dashboard
+streamlit run dashboard_app.py
+
+
+
+
+#6. 
+python forecasting.py
+
+python clustering.py
+
+python nlp_analysis.py
+
+
+
+python run_all.py
+

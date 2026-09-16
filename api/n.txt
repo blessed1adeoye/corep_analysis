@@ -1,0 +1,10 @@
+ FastAPI REST Service for ML Models
+
+
+
+
+
+ uvicorn api.app:app --reload --port 8000
+
+
+ Open http://localhost:8000/docs for the interactive Swagger UI.

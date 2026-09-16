@@ -1,0 +1,62 @@
+corep_analysis/
+├── corep_data.xlsx
+├── main_analysis.py
+├── report_generator.py
+├── dashboard_app.py
+├── predictive_models.py
+├── charts/            (auto-created)
+├── reports/           (auto-created)
+├── models/            (auto-created)
+└── requirements.txt
+
+
+
+
+
+ Updated Project Structure
+
+ corep_analysis/
+├── corep_data.xlsx
+├── main_analysis.py            (existing)
+├── clinical_questions.py       (existing)
+├── report_generator.py         (existing)
+├── predictive_models.py        (existing)
+├── forecasting.py              ← NEW
+├── clustering.py               ← NEW
+├── nlp_analysis.py             ← NEW
+├── api/
+│   ├── __init__.py
+│   ├── app.py                  ← NEW (FastAPI)
+│   └── schemas.py
+├── dashboard_app.py            (existing)
+├── run_all.py                  ← NEW (one-shot pipeline)
+├── charts/
+├── reports/
+├── models/
+└── requirements.txt            (updated)
+
+
+
+
+
+
+🏗️ Architecture Summary
+
+
+
+Excel (7 sheets)
+   │
+   ▼
+┌──────────────────────┐
+│ main_analysis.py     │  ← loads & cleans once
+└──────────┬───────────┘
+           │
+   ┌───────┼────────┬─────────┬──────────┬──────────┬─────────┐
+   ▼       ▼        ▼         ▼          ▼          ▼         ▼
+ EDA     Q&A      ML       Forecast   Clustering   NLP     Report
+   │       │       │          │          │          │         │
+   └───────┴───────┴──────────┴──────────┴──────────┴─────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+              Streamlit UI        FastAPI (REST)

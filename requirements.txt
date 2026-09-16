@@ -1,0 +1,21 @@
+pandas
+numpy
+matplotlib
+seaborn
+openpyxl
+scikit-learn
+streamlit
+plotly
+jinja2
+weasyprint
+joblib
+
+# NEW extensions
+prophet
+statsmodels
+nltk
+wordcloud
+fastapi
+uvicorn
+pydantic
+httpx
