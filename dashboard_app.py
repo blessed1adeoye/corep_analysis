@@ -1,5 +1,5 @@
 """
-Streamlit dashboard for COREP data — EXPANDED version.
+Streamlit dashboard for COREP data — EXPANDED, branded, PII-safe.
 Optimized for single-day medical outreach data.
 Run:  streamlit run dashboard_app.py
 """
@@ -12,9 +12,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from main_analysis import filter_real_drugs, _match_sheet, EXCEL_FILE
+from branding import (
+    BRAND_LINE, DEVELOPER_LINE, COPYRIGHT, POWERED_BY,
+    APP_TITLE, TRADEMARK, LOGO_PATH, DEVELOPER_NAME, COMPANY_NAME,
+)
 
 st.set_page_config(
-    page_title="COREP Outreach Dashboard",
+    page_title=APP_TITLE,
     layout="wide",
     page_icon="🏥",
     initial_sidebar_state="expanded",
@@ -42,6 +46,25 @@ st.markdown("""
     .outreach-banner p { margin: 0; opacity: 0.9; font-size: 0.95rem; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ============================================================
+# Global PII filter
+# ============================================================
+PII_COLUMNS = {
+    "First Name", "Last Name", "Middle Name",
+    "Phone", "Email", "Address",
+    "Date Of Birth", "Hospital Number",
+    "Created By Id", "Updated By Id",
+    "Completed By Id", "Dispensed By Id",
+}
+
+
+def hide_pii(df):
+    if df is None or df.empty:
+        return df
+    return df.drop(columns=[c for c in df.columns if c in PII_COLUMNS],
+                    errors="ignore")
 
 
 # ============================================================
@@ -84,7 +107,7 @@ def load():
                                          "36-50", "51-65", "65+"])
     data["patient"] = p
 
-    # Coerce all *Id columns to Int64 for merges
+    # Coerce IDs to Int64
     def _norm(df):
         if "Patient Id" in df.columns:
             df["Patient Id"] = pd.to_numeric(df["Patient Id"], errors="coerce").astype("Int64")
@@ -102,8 +125,9 @@ def load():
 
 data = load()
 
+
 # ============================================================
-# Outreach Banner
+# Outreach banner (branded)
 # ============================================================
 def _outreach_date(patient):
     if patient.empty or "Created At" not in patient.columns:
@@ -117,15 +141,18 @@ def _outreach_date(patient):
 
 st.markdown(f"""
 <div class="outreach-banner">
-    <h2>🏥 COREP Medical Outreach Dashboard</h2>
-    <p>Single-day clinical outreach · {_outreach_date(data['patient'])} · Interactive analysis of
-    patients, consultations, labs, optical, pharmacy & vitals.</p>
+    <h2>🏥 COREP Medical Outreach Dashboard {TRADEMARK}</h2>
+    <p>Single-day clinical outreach · {_outreach_date(data['patient'])} ·
+    Interactive analysis of patients, consultations, labs, optical, pharmacy &amp; vitals.</p>
+    <p style="margin-top:8px; font-size:0.85rem; opacity:0.9;">
+        {DEVELOPER_LINE}
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
 
 # ============================================================
-# Diagnostics (collapsed)
+# Diagnostics
 # ============================================================
 with st.expander("🔬 Data diagnostics", expanded=False):
     c1, c2 = st.columns(2)
@@ -144,10 +171,12 @@ with st.expander("🔬 Data diagnostics", expanded=False):
 
 
 # ============================================================
-# Sidebar Filters (no date range — single-day outreach)
+# Sidebar Filters
 # ============================================================
-st.sidebar.header("🎛️ Filters")
+if LOGO_PATH and os.path.exists(LOGO_PATH):
+    st.sidebar.image(LOGO_PATH, use_column_width=True)
 
+st.sidebar.header("🎛️ Filters")
 if st.sidebar.button("🔄 Reset all filters"):
     st.cache_data.clear()
     st.rerun()
@@ -178,7 +207,7 @@ else:
     adm_vals = []
 adm_sel = st.sidebar.multiselect("Admission status", options=adm_vals, default=adm_vals)
 
-# Apply filters (NO date range)
+# Apply filters
 flt = patient.copy()
 if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
     flt = flt[(flt["Age"] >= age_range[0]) & (flt["Age"] <= age_range[1])]
@@ -191,7 +220,7 @@ patient_ids = set(flt["Id"].dropna()) if "Id" in flt.columns else set()
 
 
 # ============================================================
-# Helper: filter child tables by selected patients
+# Filter helper
 # ============================================================
 def filt(df):
     if df.empty or "Patient Id" not in df.columns:
@@ -205,6 +234,19 @@ opt = filt(data["optical"])
 ph = filt(data["pharmacy"])
 nurse = filt(data["nursing"])
 drugs = data["drugs"]
+
+# ---- Sidebar branding ----
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    f"""
+    <div style="text-align:center; color:#666; font-size:0.8rem; line-height:1.5;">
+        <strong style="color:#0b4a6f;">{BRAND_LINE}</strong><br>
+        {DEVELOPER_LINE}<br>
+        <span style="font-size:0.75rem;">{COPYRIGHT}</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
@@ -277,12 +319,10 @@ with tab1:
                             color_discrete_sequence=px.colors.qualitative.Pastel),
                     use_container_width=True)
 
-        # Registration-time distribution (hour of day)
         if "Created At" in flt.columns and flt["Created At"].notna().any():
             t = flt.copy()
             t["_dt"] = pd.to_datetime(t["Created At"], errors="coerce")
             t["Hour"] = t["_dt"].dt.hour
-
             c5, c6 = st.columns(2)
             with c5:
                 hr = t["Hour"].value_counts().sort_index().reset_index()
@@ -293,7 +333,6 @@ with tab1:
                             color_discrete_sequence=["#2a9d8f"]),
                     use_container_width=True)
             with c6:
-                # Per-staff registration counts (if column exists)
                 if "Created By Id" in t.columns:
                     sb = t["Created By Id"].value_counts().head(10).reset_index()
                     sb.columns = ["Staff ID", "Registrations"]
@@ -368,7 +407,6 @@ with tab2:
             c2 = cons.copy()
             c2["_dt"] = pd.to_datetime(c2["Created At"], errors="coerce")
             c2["Hour"] = c2["_dt"].dt.hour
-
             hr = c2["Hour"].value_counts().sort_index().reset_index()
             hr.columns = ["Hour", "Count"]
             st.plotly_chart(
@@ -544,7 +582,7 @@ with tab5:
                 if not top10.empty:
                     st.plotly_chart(
                         px.bar(x=top10.values, y=top10.index, orientation="h",
-                                title="Top 10 Drugs by Prescription Volume",
+                                title="Top 10 Drugs by Volume",
                                 color=top10.values, color_continuous_scale="YlOrRd"),
                         use_container_width=True)
 
@@ -640,7 +678,6 @@ with tab6:
 with tab7:
     st.markdown("### 📈 Outreach Activity Breakdown")
 
-    # Bar chart of counts per service
     services = {
         "Registrations": len(flt),
         "Consultations": len(cons),
@@ -657,7 +694,6 @@ with tab7:
                 color_discrete_sequence=px.colors.qualitative.Bold),
         use_container_width=True)
 
-    # Consultation per patient histogram
     if not cons.empty:
         cpp = cons.groupby("Patient Id").size().reset_index(name="Visits")
         st.plotly_chart(
@@ -666,7 +702,6 @@ with tab7:
                           color_discrete_sequence=["#6a4c93"]),
             use_container_width=True)
 
-    # Age pyramid by gender
     if not flt.empty and "Age Group" in flt.columns and "Gender" in flt.columns:
         pyr = flt.groupby(["Age Group", "Gender"]).size().reset_index(name="Count")
         st.plotly_chart(
@@ -678,27 +713,52 @@ with tab7:
 
 
 # ------------------------------------------------------------
-# TAB 8 — TABLES
+# TAB 8 — TABLES (PII stripped)
 # ------------------------------------------------------------
 with tab8:
     st.markdown("### 📋 Data Tables")
-    t8a, t8b, t8c, t8d = st.tabs(["Patients", "Consultations", "Lab Tests", "Pharmacy"])
+    st.caption("⚠️ Patient bio-data (names, phone, email, address, DOB) is hidden for privacy. "
+               "Only clinical and operational records are shown.")
+
+    def safe_view(df, max_rows=500):
+        return hide_pii(df).head(max_rows) if df is not None and not df.empty else df
+
+    t8a, t8b, t8c = st.tabs(["🩺 Consultations", "🧪 Lab Tests", "💊 Pharmacy"])
+
     with t8a:
-        st.caption(f"{len(flt)} rows")
-        st.dataframe(flt.head(500), use_container_width=True, height=400)
+        st.caption(f"{len(cons)} rows (showing up to 500)")
+        if cons.empty:
+            st.info("No consultation records.")
+        else:
+            st.dataframe(safe_view(cons), use_container_width=True, height=400)
+
     with t8b:
-        st.caption(f"{len(cons)} rows")
-        st.dataframe(cons.head(500), use_container_width=True, height=400)
+        st.caption(f"{len(lab)} rows (showing up to 500)")
+        if lab.empty:
+            st.info("No lab test records.")
+        else:
+            st.dataframe(safe_view(lab), use_container_width=True, height=400)
+
     with t8c:
-        st.caption(f"{len(lab)} rows")
-        st.dataframe(lab.head(500), use_container_width=True, height=400)
-    with t8d:
-        st.caption(f"{len(ph)} rows")
-        st.dataframe(ph.head(500), use_container_width=True, height=400)
+        st.caption(f"{len(ph)} rows (showing up to 500)")
+        if ph.empty:
+            st.info("No pharmacy records.")
+        else:
+            st.dataframe(safe_view(ph), use_container_width=True, height=400)
 
 
 # ============================================================
-# Footer
+# Main footer (branded)
 # ============================================================
 st.markdown("---")
-st.caption("COREP Outreach Analytics · Built with Streamlit + Plotly")
+st.markdown(
+    f"""
+    <div style="text-align:center; color:#666; font-size:0.85rem; line-height:1.6; padding:16px 0;">
+        <strong style="color:#0b4a6f; font-size:1rem;">{BRAND_LINE}</strong><br>
+        {POWERED_BY}<br>
+        <em>{DEVELOPER_LINE}</em><br>
+        <span style="font-size:0.75rem;">{COPYRIGHT}</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)

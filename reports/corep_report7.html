@@ -42,27 +42,19 @@
   .chart-card .caption { color:var(--muted);
     font-size:clamp(0.75rem,1.8vw,0.9rem); margin-top:8px; font-weight:500; }
   ul.insights { padding-left:20px; font-size:clamp(0.9rem,2vw,1rem); }
-  ul.insights li { margin-bottom:8px; }
   footer.report-footer { margin-top:40px; text-align:center;
     color:var(--muted); font-size:0.9rem; line-height:1.6; }
-  @media print {
-    body { background:#fff; }
-    .container { max-width:100%; padding:0; }
-    header.report-header { box-shadow:none; border-radius:0; }
-    .chart-grid { grid-template-columns:repeat(2,1fr); }
-    .chart-card { page-break-inside:avoid; box-shadow:none;
-                  border:1px solid #eee; }
-    h2 { page-break-after:avoid; } }
-  @media (max-width:480px) {
-    table.summary th { width:45%; }
-    .chart-grid { grid-template-columns:1fr; } }
+  @media print { body{background:#fff;} .container{max-width:100%; padding:0;}
+    header.report-header{box-shadow:none; border-radius:0;}
+    .chart-grid{grid-template-columns:repeat(2,1fr);}
+    .chart-card{page-break-inside:avoid; box-shadow:none; border:1px solid #eee;} }
 </style>
 </head>
 <body>
 <div class="container">
   <header class="report-header">
     <h1>🏥 COREP Clinical Data Analysis Report ™</h1>
-    <div class="meta">Generated on 2026-09-17 11:36</div>
+    <div class="meta">Generated on 2026-09-17 11:27</div>
     <div class="meta" style="margin-top:6px; font-size:0.85em;">
       Blessedera Glowtechies Innovative Enterprises / CAC NO. 9156249™ &nbsp;·&nbsp; Developed by omobuwa BLESSED ADEOYE · Data Scientist & Analytics Engineer, Health Information Management Specialist
     </div>
@@ -77,8 +69,6 @@
       <tr><th>Gender Split</th><td>FEMALE: 150, MALE: 39</td></tr>
       
       <tr><th>Average Age</th><td>40.4 years</td></tr>
-      
-      <tr><th>Admitted Patients</th><td>0</td></tr>
       
       <tr><th>Top 5 Diagnoses</th><td>Malaria (17) | Arthritis (11) | Allergies (6) | Hypertension (5) | Stable (4)</td></tr>
       
