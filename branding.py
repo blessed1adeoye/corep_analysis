@@ -8,19 +8,17 @@ Edit once here → applies everywhere.
 # ============================================================
 DEVELOPER_NAME        = "Omobuwa Blessed Adeoye"
 
-# Full title — used in prominent places (banner, title pages, headers)
 DEVELOPER_TITLE       = ("Data Scientist & Data Engineer · "
                          "Health Information Management Specialist · "
                          "Machine Learning & AI Engineer")
 
-# Short title — used in compact places (sidebar, footers, watermarks)
 DEVELOPER_TITLE_SHORT = "AI/ML Engineer · Health Informatics"
 
 COMPANY_NAME          = "Blessedera Glowtechies Innovative Enterprises"
 COMPANY_REG           = "CAC NO. 9156249"
 TRADEMARK             = "™"
 YEAR                  = "2026"
-LOGO_PATH             = "assets/logo.png"     # or None
+LOGO_PATH             = None      # set to "assets/logo.png" if the file exists
 
 # ============================================================
 # Derived strings (do not edit)
