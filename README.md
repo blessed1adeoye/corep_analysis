@@ -1,6 +1,12 @@
 # 🏥 COREP Outreach Analytics
 
+![Made with Python](https://img.shields.io/badge/Made%20with-Python-blue)
+![Status](https://img.shields.io/badge/Status-Live-success)
+![Stars](https://img.shields.io/github/stars/blessed1adeoye/corep_analysis?style=social)
+
 > An end-to-end healthcare analytics platform for annual medical outreach programs — data ingestion, EDA, forecasting, clustering, NLP, ML, reporting, an interactive dashboard, and a REST API.
+
+
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Live-FF4B4B?logo=streamlit&logoColor=white)
