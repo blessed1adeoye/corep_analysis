@@ -8,3 +8,39 @@
 
 
  Open http://localhost:8000/docs for the interactive Swagger UI.
+
+
+
+
+
+
+
+ # 1. Full EDA + all charts
+py main_analysis.py
+
+# 2. Clinical questions (Q1–Q7)
+py clinical_questions.py
+
+# 3. Generate HTML/PDF report
+py report_generator.py
+
+# 4. Train ML models
+py predictive_models.py
+
+# 5. Forecast patient volume
+py forecasting.py
+
+# 6. Cluster patients
+py clustering.py
+
+# 7. NLP on notes/symptoms
+py nlp_analysis.py
+
+# 8. One-shot pipeline (runs 1-7 in order)
+py run_all.py
+
+# 9. Interactive dashboard
+streamlit run dashboard_app.py
+
+# 10. REST API
+uvicorn api.app:app --reload --port 8000

@@ -1,5 +1,6 @@
 {
     "powerquery.client.additionalSymbolsDirectories": [
-        "c:/Users/HP/Desktop/bgt/2026/Apps/Webs/27th august 26/corep_analysis/.vscode/excel-pq-symbols"
+        "c:/Users/HP/Desktop/bgt/2026/Apps/Webs/27th august 26/corep_analysis/.vscode/excel-pq-symbols",
+        "c:/Users/HP/Desktop/bgt/2026/Apps/Webs/corep_analysis/.vscode/excel-pq-symbols"
     ]
 }
