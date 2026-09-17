@@ -24,7 +24,9 @@ import seaborn as sns
 from jinja2 import Template
 
 from branding import (
-    BRAND_LINE, DEVELOPER_LINE, COPYRIGHT, POWERED_BY, TRADEMARK,
+    BRAND_LINE, BRAND_LINE_FULL,
+    DEVELOPER_LINE, DEVELOPER_LINE_FULL, DEVELOPER_LINE_SHORT,
+    COPYRIGHT, POWERED_BY, TRADEMARK,
 )
 from main_analysis import filter_real_drugs
 
@@ -820,7 +822,7 @@ def generate_word_report(summary, chart_items, data=None):
 
     dev_p = doc.add_paragraph()
     dev_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = dev_p.add_run(DEVELOPER_LINE)
+    r = dev_p.add_run(DEVELOPER_LINE_FULL)
     r.font.size = Pt(11); r.font.italic = True
     r.font.color.rgb = RGBColor(80, 80, 80)
 
@@ -900,7 +902,7 @@ def generate_word_report(summary, chart_items, data=None):
     ]:
         doc.add_paragraph(item, style="List Bullet")
 
-    footer_text = f"{BRAND_LINE} · {DEVELOPER_LINE} · {COPYRIGHT}"
+    footer_text = f"{BRAND_LINE} · {DEVELOPER_LINE_SHORT} · {COPYRIGHT}"
     for section in doc.sections:
         footer = section.footer
         para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()

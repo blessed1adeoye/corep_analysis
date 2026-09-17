@@ -19,7 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from branding import BRAND_LINE
+from branding import BRAND_LINE, WATERMARK
 
 warnings.filterwarnings("ignore")
 sns.set_style("whitegrid")
@@ -38,7 +38,7 @@ _chart_counter = {"n": 0}
 # ============================================================
 def add_watermark(fig, text=None):
     """Small brand watermark at bottom-right of a figure."""
-    text = text or BRAND_LINE
+    text = text or WATERMARK
     try:
         fig.text(0.99, 0.01, text,
                  ha="right", va="bottom",

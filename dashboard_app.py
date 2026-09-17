@@ -13,9 +13,14 @@ import plotly.graph_objects as go
 
 from main_analysis import filter_real_drugs, _match_sheet, EXCEL_FILE
 from branding import (
-    BRAND_LINE, DEVELOPER_LINE, COPYRIGHT, POWERED_BY,
-    APP_TITLE, TRADEMARK, LOGO_PATH, DEVELOPER_NAME, COMPANY_NAME,
+    BRAND_LINE, BRAND_LINE_FULL,
+    DEVELOPER_LINE, DEVELOPER_LINE_FULL, DEVELOPER_LINE_SHORT,
+    COPYRIGHT, POWERED_BY, APP_TITLE, TRADEMARK,
+    LOGO_PATH, DEVELOPER_NAME, COMPANY_NAME,
 )
+import httpx
+
+
 # import streamlit as st
 
 # def check_password():
@@ -40,6 +45,40 @@ st.set_page_config(
     page_icon="🏥",
     initial_sidebar_state="expanded",
 )
+
+# ============================================================
+# API Configuration
+# ============================================================
+# Read API URL from Streamlit secrets first, then fall back to localhost.
+# To set: Streamlit Cloud → Settings → Secrets
+#   API_URL = "https://your-api.onrender.com"
+# API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+
+# Read API URL from Streamlit secrets if available, else fall back to localhost.
+def _get_api_url():
+    try:
+        return st.secrets.get("API_URL", "http://localhost:8000")
+    except Exception:
+        return "http://localhost:8000"
+
+API_URL = _get_api_url()
+
+
+def call_api(endpoint: str, payload: dict, timeout: float = 8.0) -> dict | None:
+    """Call the COREP ML API. Returns dict or None on failure."""
+    try:
+        r = httpx.post(f"{API_URL}{endpoint}", json=payload, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except httpx.ConnectError:
+        return {"error": f"Cannot reach API at {API_URL}. Is it running?"}
+    except httpx.TimeoutException:
+        return {"error": "API request timed out."}
+    except httpx.HTTPStatusError as e:
+        return {"error": f"API error {e.response.status_code}: {e.response.text[:200]}"}
+    except Exception as e:
+        return {"error": f"Unexpected error: {e}"}
+
 
 # ============================================================
 # Styling
@@ -162,7 +201,7 @@ st.markdown(f"""
     <p>Single-day clinical outreach · {_outreach_date(data['patient'])} ·
     Interactive analysis of patients, consultations, labs, optical, pharmacy &amp; vitals.</p>
     <p style="margin-top:8px; font-size:0.85rem; opacity:0.9;">
-        {DEVELOPER_LINE}
+        {DEVELOPER_LINE_FULL}
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -258,8 +297,8 @@ st.sidebar.markdown(
     f"""
     <div style="text-align:center; color:#666; font-size:0.8rem; line-height:1.5;">
         <strong style="color:#0b4a6f;">{BRAND_LINE}</strong><br>
-        {DEVELOPER_LINE}<br>
-        <span style="font-size:0.75rem;">{COPYRIGHT}</span>
+        <em style="font-size:0.75rem;">{DEVELOPER_LINE_SHORT}</em><br>
+        <span style="font-size:0.7rem; opacity:0.8;">{COPYRIGHT}</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -291,8 +330,9 @@ tabs = st.tabs([
     "🩺 Vitals",
     "📈 Trends",
     "📋 Tables",
+    "🔮 Predict",
 ])
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = tabs
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = tabs
 
 
 # ------------------------------------------------------------
@@ -764,6 +804,238 @@ with tab8:
             st.dataframe(safe_view(ph), use_container_width=True, height=400)
 
 
+# ------------------------------------------------------------
+# TAB 9 — PREDICT (Clinical Decision Support)
+# ------------------------------------------------------------
+with tab9:
+    st.markdown("### 🔮 Clinical Decision Support")
+    st.caption(
+        "Enter patient vitals for instant risk assessment. "
+        "Uses trained ML models when available; falls back to clinical heuristics otherwise."
+    )
+
+    # ---- API health check ----
+    with st.expander("🔌 API Status", expanded=False):
+        try:
+            r = httpx.get(f"{API_URL}/health", timeout=3.0)
+            if r.status_code == 200:
+                info = r.json()
+                st.success(f"✅ Connected to {API_URL}")
+                st.json(info)
+            else:
+                st.error(f"⚠️ API returned {r.status_code}")
+        except Exception as e:
+            st.error(f"❌ Cannot reach API at {API_URL}")
+            st.code(f"""
+# Start the API locally:
+uvicorn api.app:app --reload --port 8000
+
+# Or deploy to Render and set the URL in Streamlit secrets:
+API_URL = "https://your-api.onrender.com"
+
+# Current error: {e}
+""", language="bash")
+
+    st.markdown("---")
+
+    # ---- Two-column layout ----
+    col_malaria, col_admission = st.columns(2)
+
+    # ============================================
+    # MALARIA PREDICTION
+    # ============================================
+    with col_malaria:
+        st.markdown("#### 🦟 Malaria Risk Assessment")
+
+        with st.form("malaria_form"):
+            m_age = st.number_input("Age", min_value=0, max_value=120,
+                                     value=25, step=1, key="m_age")
+            m_gender = st.selectbox("Gender", ["Female", "Male", "Other"],
+                                     key="m_gender")
+            m_temp = st.slider("Temperature (°C)", 35.0, 42.0, 37.5,
+                                step=0.1, key="m_temp")
+            m_pulse = st.slider("Pulse (bpm)", 40, 200, 80,
+                                 step=1, key="m_pulse")
+            m_sys = st.slider("Systolic BP (mmHg)", 70, 220, 120,
+                               step=1, key="m_sys")
+            m_dia = st.slider("Diastolic BP (mmHg)", 40, 140, 80,
+                               step=1, key="m_dia")
+
+            submit_m = st.form_submit_button("🦟 Assess Malaria Risk",
+                                              use_container_width=True,
+                                              type="primary")
+
+        if submit_m:
+            payload = {
+                "Age": m_age, "Gender": m_gender,
+                "avg_temp": m_temp, "avg_pulse": m_pulse,
+                "avg_sys": m_sys, "avg_dia": m_dia,
+            }
+            with st.spinner("Assessing..."):
+                result = call_api("/predict/malaria", payload)
+
+            if result and "error" not in result:
+                prob = result["probability"]
+                pred = result["prediction"]
+
+                # Big metric
+                st.metric(
+                    "Malaria Risk",
+                    f"{prob:.1%}",
+                    delta="Positive (likely)" if pred else "Negative (likely)",
+                    delta_color="inverse" if pred else "normal",
+                )
+
+                # Color-coded bar
+                if pred:
+                    st.error(f"🔴 {result['label']}")
+                else:
+                    st.success(f"🟢 {result['label']}")
+
+                # Progress bar
+                st.progress(min(prob, 1.0))
+
+                # Details
+                with st.expander("📋 Prediction details", expanded=False):
+                    st.json(result)
+
+                # Clinical interpretation
+                st.markdown("##### 🩺 Interpretation")
+                if prob >= 0.7:
+                    st.markdown("**High risk** — recommend immediate malaria RDT or microscopy.")
+                elif prob >= 0.4:
+                    st.markdown("**Moderate risk** — consider testing; monitor symptoms.")
+                else:
+                    st.markdown("**Low risk** — routine observation; test if symptoms develop.")
+            elif result and "error" in result:
+                st.error(f"❌ {result['error']}")
+
+    # ============================================
+    # ADMISSION PREDICTION
+    # ============================================
+    with col_admission:
+        st.markdown("#### 🏥 Admission Risk Assessment")
+
+        with st.form("admission_form"):
+            a_age = st.number_input("Age", min_value=0, max_value=120,
+                                     value=45, step=1, key="a_age")
+            a_gender = st.selectbox("Gender", ["Female", "Male", "Other"],
+                                     key="a_gender")
+            a_cons = st.number_input("Number of consultations today",
+                                      min_value=0, max_value=20, value=1,
+                                      step=1, key="a_cons")
+            a_sys = st.slider("Systolic BP (mmHg)", 70, 220, 125,
+                               step=1, key="a_sys")
+            a_dia = st.slider("Diastolic BP (mmHg)", 40, 140, 82,
+                               step=1, key="a_dia")
+            a_temp = st.slider("Temperature (°C)", 35.0, 42.0, 37.0,
+                                step=0.1, key="a_temp")
+            a_pulse = st.slider("Pulse (bpm)", 40, 200, 78,
+                                 step=1, key="a_pulse")
+            a_spo2 = st.slider("SpO₂ (%)", 70, 100, 97,
+                                step=1, key="a_spo2")
+
+            submit_a = st.form_submit_button("🏥 Assess Admission Risk",
+                                              use_container_width=True,
+                                              type="primary")
+
+        if submit_a:
+            payload = {
+                "Age": a_age, "Gender": a_gender,
+                "n_consultations": a_cons,
+                "avg_sys": a_sys, "avg_dia": a_dia,
+                "avg_temp": a_temp, "avg_pulse": a_pulse,
+                "avg_spo2": a_spo2,
+            }
+            with st.spinner("Assessing..."):
+                result = call_api("/predict/admission", payload)
+
+            if result and "error" not in result:
+                prob = result["probability"]
+                pred = result["prediction"]
+
+                st.metric(
+                    "Admission Risk",
+                    f"{prob:.1%}",
+                    delta="Likely Admitted" if pred else "Likely Outpatient",
+                    delta_color="inverse" if pred else "normal",
+                )
+
+                if pred:
+                    st.error(f"🔴 {result['label']}")
+                else:
+                    st.success(f"🟢 {result['label']}")
+
+                st.progress(min(prob, 1.0))
+
+                with st.expander("📋 Prediction details", expanded=False):
+                    st.json(result)
+
+                st.markdown("##### 🩺 Interpretation")
+                if prob >= 0.7:
+                    st.markdown("**High risk** — recommend admission or close observation.")
+                elif prob >= 0.4:
+                    st.markdown("**Moderate risk** — monitor vitals; reassess in 2–4 hours.")
+                else:
+                    st.markdown("**Low risk** — suitable for outpatient management.")
+            elif result and "error" in result:
+                st.error(f"❌ {result['error']}")
+
+    # ---- Batch mode ----
+    st.markdown("---")
+    with st.expander("📊 Batch prediction (paste multiple patients)", expanded=False):
+        st.caption(
+            "Enter one patient per line. Format: "
+            "`age,gender,temp,pulse,systolic,diastolic`"
+        )
+        batch_text = st.text_area(
+            "Patients",
+            height=150,
+            placeholder="8,Female,39.2,115,100,65\n45,Male,37.0,78,125,82\n...",
+        )
+        if st.button("Run batch malaria prediction"):
+            lines = [l.strip() for l in batch_text.strip().split("\n") if l.strip()]
+            if not lines:
+                st.warning("No data entered.")
+            else:
+                rows = []
+                progress = st.progress(0)
+                for i, line in enumerate(lines):
+                    try:
+                        parts = [p.strip() for p in line.split(",")]
+                        payload = {
+                            "Age": float(parts[0]),
+                            "Gender": parts[1],
+                            "avg_temp": float(parts[2]),
+                            "avg_pulse": float(parts[3]),
+                            "avg_sys": float(parts[4]),
+                            "avg_dia": float(parts[5]),
+                        }
+                        r = call_api("/predict/malaria", payload)
+                        if r and "error" not in r:
+                            rows.append({
+                                "Input": line,
+                                "Risk": f"{r['probability']:.1%}",
+                                "Prediction": r["label"],
+                            })
+                        else:
+                            rows.append({"Input": line, "Risk": "—",
+                                          "Prediction": r.get("error", "Failed")})
+                    except Exception as e:
+                        rows.append({"Input": line, "Risk": "—",
+                                      "Prediction": f"Parse error: {e}"})
+                    progress.progress((i + 1) / len(lines))
+
+                if rows:
+                    st.dataframe(rows, use_container_width=True)
+                    df_batch = pd.DataFrame(rows)
+                    st.download_button(
+                        "⬇️ Download results as CSV",
+                        df_batch.to_csv(index=False),
+                        file_name="batch_predictions.csv",
+                        mime="text/csv",
+                    )
+
 # ============================================================
 # Main footer (branded)
 # ============================================================
@@ -771,9 +1043,9 @@ st.markdown("---")
 st.markdown(
     f"""
     <div style="text-align:center; color:#666; font-size:0.85rem; line-height:1.6; padding:16px 0;">
-        <strong style="color:#0b4a6f; font-size:1rem;">{BRAND_LINE}</strong><br>
+        <strong style="color:#0b4a6f; font-size:1rem;">{BRAND_LINE_FULL}</strong><br>
         {POWERED_BY}<br>
-        <em>{DEVELOPER_LINE}</em><br>
+        <em>{DEVELOPER_LINE_FULL}</em><br>
         <span style="font-size:0.75rem;">{COPYRIGHT}</span>
     </div>
     """,
