@@ -16,6 +16,23 @@ from branding import (
     BRAND_LINE, DEVELOPER_LINE, COPYRIGHT, POWERED_BY,
     APP_TITLE, TRADEMARK, LOGO_PATH, DEVELOPER_NAME, COMPANY_NAME,
 )
+# import streamlit as st
+
+# def check_password():
+#     if "auth" not in st.session_state:
+#         st.session_state.auth = False
+#     if not st.session_state.auth:
+#         st.title("🔒 COREP Outreach Dashboard")
+#         pwd = st.text_input("Password", type="password")
+#         if st.button("Login"):
+#             if pwd == st.secrets.get("AUTH_PASSWORD", ""):
+#                 st.session_state.auth = True
+#                 st.rerun()
+#             else:
+#                 st.error("Incorrect password")
+#         st.stop()
+
+# check_password()
 
 st.set_page_config(
     page_title=APP_TITLE,
