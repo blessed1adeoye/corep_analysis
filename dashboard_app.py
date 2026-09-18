@@ -5,6 +5,7 @@ Run:  streamlit run dashboard_app.py
 """
 
 import os
+import time
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -21,24 +22,6 @@ from branding import (
 import httpx
 import ollama
 
-
-# import streamlit as st
-
-# def check_password():
-#     if "auth" not in st.session_state:
-#         st.session_state.auth = False
-#     if not st.session_state.auth:
-#         st.title("🔒 COREP Outreach Dashboard")
-#         pwd = st.text_input("Password", type="password")
-#         if st.button("Login"):
-#             if pwd == st.secrets.get("AUTH_PASSWORD", ""):
-#                 st.session_state.auth = True
-#                 st.rerun()
-#             else:
-#                 st.error("Incorrect password")
-#         st.stop()
-
-# check_password()
 
 st.set_page_config(
     page_title=APP_TITLE,
@@ -57,20 +40,16 @@ try:
 except Exception as e:
     st.sidebar.warning(f"Logo not found: {e}")
 
+
 # ============================================================
 # API Configuration
 # ============================================================
-# Read API URL from Streamlit secrets first, then fall back to localhost.
-# To set: Streamlit Cloud → Settings → Secrets
-#   API_URL = "https://your-api.onrender.com"
-# API_URL = st.secrets.get("API_URL", "http://localhost:8000")
-
-# Read API URL from Streamlit secrets if available, else fall back to localhost.
 def _get_api_url():
     try:
         return st.secrets.get("API_URL", "http://localhost:8000")
     except Exception:
         return "http://localhost:8000"
+
 
 API_URL = _get_api_url()
 
@@ -174,7 +153,6 @@ def load():
                                          "36-50", "51-65", "65+"])
     data["patient"] = p
 
-    # Coerce IDs to Int64
     def _norm(df):
         if "Patient Id" in df.columns:
             df["Patient Id"] = pd.to_numeric(df["Patient Id"], errors="coerce").astype("Int64")
@@ -194,7 +172,7 @@ data = load()
 
 
 # ============================================================
-# Outreach banner (branded)
+# Outreach banner
 # ============================================================
 def _outreach_date(patient):
     if patient.empty or "Created At" not in patient.columns:
@@ -250,7 +228,6 @@ if st.sidebar.button("🔄 Reset all filters"):
 
 patient = data["patient"]
 
-# Age
 if not patient.empty and "Age" in patient.columns and patient["Age"].notna().any():
     amn = int(patient["Age"].min(skipna=True))
     amx = int(patient["Age"].max(skipna=True))
@@ -262,19 +239,16 @@ if not patient.empty and "Age" in patient.columns and patient["Age"].notna().any
 else:
     age_range = (0, 100)
 
-# Gender
 ug = sorted(patient["Gender"].dropna().astype(str).unique()) \
      if not patient.empty and "Gender" in patient.columns else []
 genders = st.sidebar.multiselect("Gender", options=ug, default=ug)
 
-# Admission
 if not patient.empty and "Is Admitted" in patient.columns:
     adm_vals = sorted(patient["Is Admitted"].dropna().astype(str).unique())
 else:
     adm_vals = []
 adm_sel = st.sidebar.multiselect("Admission status", options=adm_vals, default=adm_vals)
 
-# Apply filters
 flt = patient.copy()
 if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
     flt = flt[(flt["Age"] >= age_range[0]) & (flt["Age"] <= age_range[1])]
@@ -286,9 +260,6 @@ if adm_sel and "Is Admitted" in flt.columns:
 patient_ids = set(flt["Id"].dropna()) if "Id" in flt.columns else set()
 
 
-# ============================================================
-# Filter helper
-# ============================================================
 def filt(df):
     if df.empty or "Patient Id" not in df.columns:
         return df.iloc[0:0]
@@ -302,7 +273,7 @@ ph = filt(data["pharmacy"])
 nurse = filt(data["nursing"])
 drugs = data["drugs"]
 
-# ---- Sidebar branding ----
+# Sidebar branding
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     f"""
@@ -826,7 +797,6 @@ with tab9:
         "Uses trained ML models when available; falls back to clinical heuristics otherwise."
     )
 
-    # ---- API health check ----
     with st.expander("🔌 API Status", expanded=False):
         try:
             r = httpx.get(f"{API_URL}/health", timeout=3.0)
@@ -843,19 +813,15 @@ with tab9:
 uvicorn api.app:app --reload --port 8000
 
 # Or deploy to Render and set the URL in Streamlit secrets:
-API_URL = "https://your-api.onrender.com"
+API_URL = "https://my-api.onrender.com"
 
 # Current error: {e}
 """, language="bash")
 
     st.markdown("---")
 
-    # ---- Two-column layout ----
     col_malaria, col_admission = st.columns(2)
 
-    # ============================================
-    # MALARIA PREDICTION
-    # ============================================
     with col_malaria:
         st.markdown("#### 🦟 Malaria Risk Assessment")
 
@@ -890,7 +856,6 @@ API_URL = "https://your-api.onrender.com"
                 prob = result["probability"]
                 pred = result["prediction"]
 
-                # Big metric
                 st.metric(
                     "Malaria Risk",
                     f"{prob:.1%}",
@@ -898,20 +863,16 @@ API_URL = "https://your-api.onrender.com"
                     delta_color="inverse" if pred else "normal",
                 )
 
-                # Color-coded bar
                 if pred:
                     st.error(f"🔴 {result['label']}")
                 else:
                     st.success(f"🟢 {result['label']}")
 
-                # Progress bar
                 st.progress(min(prob, 1.0))
 
-                # Details
                 with st.expander("📋 Prediction details", expanded=False):
                     st.json(result)
 
-                # Clinical interpretation
                 st.markdown("##### 🩺 Interpretation")
                 if prob >= 0.7:
                     st.markdown("**High risk** — recommend immediate malaria RDT or microscopy.")
@@ -922,9 +883,6 @@ API_URL = "https://your-api.onrender.com"
             elif result and "error" in result:
                 st.error(f"❌ {result['error']}")
 
-    # ============================================
-    # ADMISSION PREDICTION
-    # ============================================
     with col_admission:
         st.markdown("#### 🏥 Admission Risk Assessment")
 
@@ -993,7 +951,6 @@ API_URL = "https://your-api.onrender.com"
             elif result and "error" in result:
                 st.error(f"❌ {result['error']}")
 
-    # ---- Batch mode ----
     st.markdown("---")
     with st.expander("📊 Batch prediction (paste multiple patients)", expanded=False):
         st.caption(
@@ -1049,222 +1006,43 @@ API_URL = "https://your-api.onrender.com"
                     )
 
 
-# # ------------------------------------------------------------
-# # TAB 10 — ASK COREP AI (LLM Chat)
-# # ------------------------------------------------------------
-# with tab10:
-#     st.markdown("### 🤖 Ask COREP AI")
-#     st.caption(
-#         "Ask questions about today's outreach data in natural language. "
-#         "Powered by a local LLM via Ollama — your data never leaves your machine."
-#     )
-
-#     # ---- Ollama availability check ----
-#     @st.cache_data(ttl=60, show_spinner=False)
-#     def _ollama_models():
-#         try:
-#             result = ollama.list()
-#             return [m.get("name", m.get("model", "unknown"))
-#                     for m in result.get("models", [])]
-#         except Exception:
-#             return []
-
-#     available_models = _ollama_models()
-
-#     if not available_models:
-#         st.warning(
-#             "⚠️ **Ollama is not running** or no models are installed.\n\n"
-#             "This tab uses a local LLM to answer questions about your data. "
-#             "Set it up on your machine with the commands below, then refresh."
-#         )
-#         st.code("""
-# # 1. Install Ollama → https://ollama.com/download
-
-# # 2. Start the Ollama service (keep this terminal open)
-# ollama serve
-
-# # 3. Pull a lightweight model (choose one)
-# ollama pull llama3.2       # ~2 GB — fast, good for Q&A
-# ollama pull phi3           # ~2.5 GB — smaller, faster
-# ollama pull mistral        # ~4 GB — higher quality
-# """, language="bash")
-
-#         st.info(
-#             "💡 **Note for cloud deployment:** Ollama runs on your local machine, "
-#             "so this tab works when you run the dashboard locally with "
-#             "`streamlit run dashboard_app.py`. On Streamlit Cloud it will show this message."
-#         )
-#     else:
-#         # ---- Model selector ----
-#         default_model = next(
-#             (m for m in available_models if "llama3.2" in m.lower()),
-#             available_models[0],
-#         )
-#         selected_model = st.selectbox(
-#             "🧠 Model",
-#             options=available_models,
-#             index=available_models.index(default_model),
-#             help="Smaller models respond faster; larger models are more accurate.",
-#         )
-
-#         # ---- Build context from the currently filtered data ----
-#         def _build_context():
-#             lines = []
-#             lines.append(f"Today's outreach summary:")
-#             lines.append(f"- Total patients registered: {len(flt)}")
-#             lines.append(f"- Total consultations: {len(cons)}")
-#             lines.append(f"- Total lab tests: {len(lab)}")
-#             lines.append(f"- Total optical assessments: {len(opt)}")
-#             lines.append(f"- Total pharmacy orders: {len(ph)}")
-#             lines.append(f"- Total nursing assessments: {len(nurse)}")
-
-#             if not flt.empty and "Gender" in flt.columns:
-#                 gc = flt["Gender"].value_counts().to_dict()
-#                 lines.append(f"- Gender distribution: {gc}")
-
-#             if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
-#                 lines.append(f"- Average age: {flt['Age'].mean():.1f} years")
-
-#             if not flt.empty and "Age Group" in flt.columns:
-#                 ag = flt["Age Group"].value_counts().sort_index().to_dict()
-#                 lines.append(f"- Age groups: {ag}")
-
-#             if not cons.empty and "Diagnosis" in cons.columns:
-#                 top_dx = cons["Diagnosis"].value_counts().head(10).to_dict()
-#                 lines.append(f"- Top 10 diagnoses: {top_dx}")
-
-#             if not lab.empty and "Malaria Parasite" in lab.columns:
-#                 pos = lab["Malaria Parasite"].astype(str).str.lower().isin(
-#                     ["positive", "pos", "reactive", "+", "1", "true"]
-#                 ).sum()
-#                 lines.append(f"- Malaria positive tests: {pos} out of {len(lab)}")
-
-#             if not ph.empty and "Drug Name" in ph.columns:
-#                 try:
-#                     from main_analysis import filter_real_drugs
-#                     names = filter_real_drugs(ph["Drug Name"])
-#                     top_drugs = names.value_counts().head(10).to_dict()
-#                     lines.append(f"- Top 10 dispensed drugs: {top_drugs}")
-#                 except Exception:
-#                     pass
-
-#             if not nurse.empty:
-#                 vitals = [c for c in ["Blood Pressure Systolic", "Temperature",
-#                                        "Pulse Rate", "Oxygen Saturation"]
-#                           if c in nurse.columns]
-#                 for v in vitals:
-#                     if nurse[v].notna().any():
-#                         lines.append(f"- Mean {v}: {nurse[v].mean():.1f}")
-
-#             return "\n".join(lines)
-
-#         # ---- Session state for chat history ----
-#         if "chat_messages" not in st.session_state:
-#             st.session_state.chat_messages = []
-
-#         # ---- Context display (collapsible) ----
-#         with st.expander("📋 View data context sent to the AI", expanded=False):
-#             st.code(_build_context(), language="text")
-
-#         # ---- Render conversation history ----
-#         for msg in st.session_state.chat_messages:
-#             with st.chat_message(msg["role"]):
-#                 st.markdown(msg["content"])
-
-#         # ---- Chat input ----
-#         user_prompt = st.chat_input("Ask something about today's outreach…")
-
-#         if user_prompt:
-#             # Show and store user message
-#             st.session_state.chat_messages.append(
-#                 {"role": "user", "content": user_prompt}
-#             )
-#             with st.chat_message("user"):
-#                 st.markdown(user_prompt)
-
-#             # Build system prompt with data context
-#             system_prompt = f"""You are a helpful healthcare analytics assistant for the COREP annual medical outreach program.
-
-# You answer questions about today's outreach data based ONLY on the context provided below.
-
-# CONTEXT (today's outreach data):
-# {_build_context()}
-
-# RULES:
-# 1. Base all answers strictly on the context above.
-# 2. If the answer isn't in the context, say "I don't have that information in today's data."
-# 3. Never invent patient names, IDs, or specific individuals.
-# 4. Use bullet points or short paragraphs for clarity.
-# 5. Keep responses concise — 2-4 sentences unless the user asks for detail.
-# 6. When referencing numbers, include the exact figure from the context.
-# """
-
-#             # Stream the LLM response
-#             with st.chat_message("assistant"):
-#                 placeholder = st.empty()
-#                 full_response = ""
-#                 try:
-#                     stream = ollama.chat(
-#                         model=selected_model,
-#                         messages=[
-#                             {"role": "system", "content": system_prompt},
-#                             *[
-#                                 {"role": m["role"], "content": m["content"]}
-#                                 for m in st.session_state.chat_messages
-#                             ],
-#                         ],
-#                         stream=True,
-#                         options={
-#                             "temperature": 0.3,   # factual, less creative
-#                             "num_predict": 400,   # cap response length
-#                         },
-#                     )
-#                     for chunk in stream:
-#                         piece = chunk.get("message", {}).get("content", "")
-#                         if piece:
-#                             full_response += piece
-#                             placeholder.markdown(full_response + "▌")
-#                     placeholder.markdown(full_response)
-#                 except Exception as e:
-#                     full_response = f"❌ Error: {e}"
-#                     placeholder.error(full_response)
-
-#             st.session_state.chat_messages.append(
-#                 {"role": "assistant", "content": full_response}
-#             )
-
-#         # ---- Footer actions ----
-#         col_a, col_b = st.columns([1, 4])
-#         with col_a:
-#             if st.session_state.chat_messages:
-#                 if st.button("🗑️ Clear chat", use_container_width=True):
-#                     st.session_state.chat_messages = []
-#                     st.rerun()
-
-#         # ---- Example prompts ----
-#         with st.expander("💡 Try asking…", expanded=False):
-#             st.markdown("""
-# - *"How many patients were registered today?"*
-# - *"What is the gender split?"*
-# - *"What are the top 5 diagnoses?"*
-# - *"How many malaria tests came back positive?"*
-# - *"Which drugs were dispensed the most?"*
-# - *"What is the average age of patients?"*
-# - *"Summarize today's outreach in 3 sentences."*
-# - *"What percentage of patients had malaria?"*
-# - *"Which age group had the most patients?"*
-# - *"Give me an executive summary for the COREP team."*
-# """)
-
 # ------------------------------------------------------------
-# TAB 10 — ASK COREP AI (LLM Chat — local Ollama + Ollama Cloud)
+# TAB 10 — ASK COREP AI (Dual-Mode Chat + Persistent Charts)
+#   • Outreach Data mode — answers ONLY from today's data
+#   • General Knowledge mode — answers anything; charts via ```chart``` JSON
+#   • Provider: Local Ollama first, Ollama Cloud fallback
+#   • Layout: responses stream ABOVE a pinned input at the bottom
+#   • Charts persist in chat history
+#   • Auto-scrolls to newest message
 # ------------------------------------------------------------
 with tab10:
     st.markdown("### 🤖 Ask COREP AI")
     st.caption(
-        "Ask questions about today's outreach data in natural language. "
-        "Powered by Ollama — local when available, cloud as fallback."
+        "Ask anything — about today's outreach data OR general questions. "
+        "Try: *\"Plot the top 5 diagnoses\"* or *\"Show gender split as pie\"*."
     )
+
+    # Sticky input styling
+    st.markdown("""
+    <style>
+        div[data-testid="stChatInput"] {
+            position: sticky;
+            bottom: 0;
+            background: var(--background-color, #fff);
+            padding-top: 8px;
+            z-index: 10;
+            border-top: 1px solid rgba(0,0,0,0.08);
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ============================================================
+    # Local imports
+    # ============================================================
+    import json as _json
+    import re as _re
+    import plotly.express as _px
+    import pandas as _pd
 
     # ============================================================
     # Provider detection
@@ -1279,7 +1057,6 @@ with tab10:
             return []
 
     def _cloud_config():
-        """Read cloud config from Streamlit secrets, fall back to env vars."""
         def _get(key, default=""):
             try:
                 return st.secrets.get(key, default)
@@ -1296,80 +1073,99 @@ with tab10:
 
     local_models = _local_ollama_models()
     cloud_cfg = _cloud_config()
-
     has_local = len(local_models) > 0
-    has_cloud = bool(cloud_cfg["enabled"] and cloud_cfg["url"] and cloud_cfg["api_key"])
+    has_cloud = bool(
+        cloud_cfg["enabled"] and cloud_cfg["url"] and cloud_cfg["api_key"]
+    )
 
+    # ============================================================
+    # No provider — setup instructions
+    # ============================================================
     if not has_local and not has_cloud:
         st.warning(
             "⚠️ **No LLM provider available.** "
-            "Set up local Ollama or configure Ollama Cloud in Streamlit secrets."
+            "Set up local Ollama or Ollama Cloud."
         )
-        st.markdown("#### Local setup")
         st.code("""
+# Local
 ollama serve
 ollama pull llama3.2
-""", language="bash")
-        st.markdown("#### Cloud setup (Streamlit Cloud → Settings → Secrets)")
-        st.code("""
+
+# Or cloud (Streamlit Cloud → Settings → Secrets)
 CLOUD_ENABLED = "true"
 CLOUD_URL     = "https://ollama.com/v1"
-CLOUD_API_KEY = "your-ollama-cloud-key"
+CLOUD_API_KEY = "my-ollama-cloud-key"
 CLOUD_MODEL   = "gpt-oss:20b"
-""", language="toml")
+""", language="bash")
     else:
-        # ---- Provider selector ----
+        # ============================================================
+        # Controls — Provider, Model, Mode
+        # ============================================================
         providers = []
         if has_local:
             providers.append("🖥️ Local Ollama (fast, private)")
         if has_cloud:
             providers.append("☁️ Ollama Cloud (works everywhere)")
 
-        provider = st.radio(
-            "⚡ Provider",
-            options=providers,
+        col_provider, col_model = st.columns([1, 1])
+
+        with col_provider:
+            provider = st.radio(
+                "⚡ Provider",
+                options=providers,
+                index=0,
+                horizontal=True,
+            )
+            use_local = provider.startswith("🖥️")
+
+        with col_model:
+            if use_local:
+                selected_model = st.selectbox(
+                    "🧠 Model",
+                    options=local_models,
+                    index=next(
+                        (i for i, m in enumerate(local_models)
+                         if "llama3.2" in m.lower()),
+                        0,
+                    ),
+                )
+            else:
+                cloud_models = [
+                    "gpt-oss:20b", "gpt-oss:120b",
+                    "glm-5.3-flash", "deepseek-v4.1-flash",
+                    "nemotron-3-nano:30b", "gemma4:31b",
+                    "kimi-k2.6", "mistral-large-3:675b",
+                    "glm-5.3", "qwen3.5:397b",
+                ]
+                default_idx = 0
+                if cloud_cfg["model"] in cloud_models:
+                    default_idx = cloud_models.index(cloud_cfg["model"])
+                selected_model = st.selectbox(
+                    "🧠 Model",
+                    options=cloud_models,
+                    index=default_idx,
+                )
+
+        mode = st.radio(
+            "🎛️ Mode",
+            options=["📊 Outreach Data", "🌍 General Knowledge"],
             index=0,
             horizontal=True,
-            help="Local is fastest; Cloud works on Streamlit Cloud too.",
+            help=(
+                "**Outreach Data** — only from today's numbers. "
+                "**General Knowledge** — anything + full chart support."
+            ),
         )
-        use_local = provider.startswith("🖥️")
+        is_data_mode = mode.startswith("📊")
 
-        # ---- Model selector ----
-        if use_local:
-            selected_model = st.selectbox(
-                "🧠 Model",
-                options=local_models,
-                index=next(
-                    (i for i, m in enumerate(local_models)
-                     if "llama3.2" in m.lower()),
-                    0,
-                ),
-            )
-        else:
-            cloud_models = [
-                "gpt-oss:20b",           # ⭐ recommended
-                "gpt-oss:120b",
-                "glm-5.3-flash",         # fastest
-                "deepseek-v4.1-flash",
-                "nemotron-3-nano:30b",
-                "gemma4:31b",
-                "kimi-k2.6",
-                "mistral-large-3:675b",
-                "glm-5.3",
-                "qwen3.5:397b",
-            ]
-            default_idx = 0
-            if cloud_cfg["model"] in cloud_models:
-                default_idx = cloud_models.index(cloud_cfg["model"])
-            selected_model = st.selectbox(
-                "🧠 Model",
-                options=cloud_models,
-                index=default_idx,
-                help="Cloud models from your Ollama plan.",
-            )
+        st.caption(
+            f"**Active:** {provider.split('(')[0].strip()} · "
+            f"Model: `{selected_model}` · "
+            f"Mode: **{mode}**"
+        )
 
         # ============================================================
-        # Context builder (same as before)
+        # Context builder
         # ============================================================
         def _build_context():
             lines = ["Today's outreach summary:"]
@@ -1381,37 +1177,212 @@ CLOUD_MODEL   = "gpt-oss:20b"
             lines.append(f"- Total nursing assessments: {len(nurse)}")
 
             if not flt.empty and "Gender" in flt.columns:
-                lines.append(f"- Gender distribution: {flt['Gender'].value_counts().to_dict()}")
-            if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
+                lines.append(
+                    f"- Gender distribution: "
+                    f"{flt['Gender'].value_counts().to_dict()}"
+                )
+            if (not flt.empty and "Age" in flt.columns
+                    and flt["Age"].notna().any()):
                 lines.append(f"- Average age: {flt['Age'].mean():.1f} years")
             if not flt.empty and "Age Group" in flt.columns:
-                lines.append(f"- Age groups: {flt['Age Group'].value_counts().sort_index().to_dict()}")
+                lines.append(
+                    f"- Age groups: "
+                    f"{flt['Age Group'].value_counts().sort_index().to_dict()}"
+                )
             if not cons.empty and "Diagnosis" in cons.columns:
-                lines.append(f"- Top 10 diagnoses: {cons['Diagnosis'].value_counts().head(10).to_dict()}")
+                top_dx = cons["Diagnosis"].value_counts().head(10)
+                lines.append(f"- Top 10 diagnoses: {top_dx.to_dict()}")
             if not lab.empty and "Malaria Parasite" in lab.columns:
                 pos = lab["Malaria Parasite"].astype(str).str.lower().isin(
-                    ["positive", "pos", "reactive", "+", "1", "true"]).sum()
-                lines.append(f"- Malaria positive tests: {pos} out of {len(lab)}")
+                    ["positive", "pos", "reactive", "+", "1", "true"]
+                ).sum()
+                lines.append(
+                    f"- Malaria positive tests: {pos} out of {len(lab)}"
+                )
             if not ph.empty and "Drug Name" in ph.columns:
                 try:
                     from main_analysis import filter_real_drugs
                     names = filter_real_drugs(ph["Drug Name"])
-                    lines.append(f"- Top 10 dispensed drugs: {names.value_counts().head(10).to_dict()}")
+                    top_drugs = names.value_counts().head(10)
+                    lines.append(
+                        f"- Top 10 dispensed drugs: {top_drugs.to_dict()}"
+                    )
                 except Exception:
                     pass
+            if not nurse.empty:
+                for v in ["Blood Pressure Systolic", "Temperature",
+                          "Pulse Rate", "Oxygen Saturation"]:
+                    if v in nurse.columns and nurse[v].notna().any():
+                        lines.append(f"- Mean {v}: {nurse[v].mean():.1f}")
             return "\n".join(lines)
 
-        # ---- Session state ----
+        # ============================================================
+        # Session state
+        # ============================================================
         if "chat_messages" not in st.session_state:
             st.session_state.chat_messages = []
+
+        if "chat_mode" not in st.session_state:
+            st.session_state.chat_mode = mode
+        if st.session_state.chat_mode != mode:
+            st.session_state.chat_messages = []
+            st.session_state.chat_mode = mode
 
         with st.expander("📋 View data context sent to the AI", expanded=False):
             st.code(_build_context(), language="text")
 
-        # ---- Render history ----
-        for msg in st.session_state.chat_messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        # ============================================================
+        # Chart parsing + rendering
+        # ============================================================
+        _CHART_BLOCK_RE = _re.compile(
+            r"```(?:chart|json)\s*(\{.*?\})\s*```",
+            _re.DOTALL | _re.IGNORECASE,
+        )
+
+        def _try_repair_json(raw: str):
+            s = raw.strip()
+            s = _re.sub(r",\s*([}\]])", r"\1", s)
+            open_braces = s.count("{") - s.count("}")
+            open_brackets = s.count("[") - s.count("]")
+            if s.count('"') % 2 == 1:
+                s += '"'
+            s += "]" * max(0, open_brackets)
+            s += "}" * max(0, open_braces)
+            try:
+                data = _json.loads(s)
+                if isinstance(data, dict) and "type" in data:
+                    labels = data.get("labels") or []
+                    values = data.get("values") or []
+                    if labels and values:
+                        n = min(len(labels), len(values))
+                        data["labels"] = labels[:n]
+                        data["values"] = values[:n]
+                        return data
+            except Exception:
+                pass
+            return None
+
+        def _extract_chart_block(text: str):
+            for m in _CHART_BLOCK_RE.finditer(text):
+                raw = m.group(1)
+                try:
+                    data = _json.loads(raw)
+                    if isinstance(data, dict) and "type" in data:
+                        return data
+                except Exception:
+                    repaired = _try_repair_json(raw)
+                    if repaired:
+                        return repaired
+
+            pattern = _re.compile(
+                r"```(?:chart|json)\s*(\{.*?)(?=```|\Z)",
+                _re.DOTALL | _re.IGNORECASE,
+            )
+            for m in pattern.finditer(text):
+                repaired = _try_repair_json(m.group(1))
+                if repaired:
+                    return repaired
+
+            pattern2 = _re.compile(
+                r'\{[^{}]*"type"\s*:\s*"[^"]+"[^{}]*"labels"[^{}]*\}',
+                _re.DOTALL,
+            )
+            for m in pattern2.finditer(text):
+                try:
+                    data = _json.loads(m.group(0))
+                    if isinstance(data, dict) and "type" in data:
+                        return data
+                except Exception:
+                    continue
+
+            return None
+
+        def _strip_chart_block(text: str) -> str:
+            s = _CHART_BLOCK_RE.sub("", text)
+            s = _re.sub(
+                r"```(?:chart|json)\s*\{.*?(?=```|\Z).*?(?:```|\Z)",
+                "", s, flags=_re.DOTALL | _re.IGNORECASE,
+            )
+            return s.strip()
+
+        def _render_chart(spec: dict):
+            ctype = str(spec.get("type", "")).lower()
+            title = spec.get("title", "Chart")
+            labels = spec.get("labels") or []
+            values = spec.get("values") or []
+
+            if not labels or not values or len(labels) != len(values):
+                st.warning(
+                    f"⚠️ Chart data mismatch "
+                    f"(labels={len(labels)}, values={len(values)})."
+                )
+                return
+
+            df_chart = _pd.DataFrame({"Category": labels, "Value": values})
+
+            try:
+                if ctype == "bar":
+                    fig = _px.bar(df_chart, x="Category", y="Value",
+                                  title=title, color="Value",
+                                  color_continuous_scale="Viridis",
+                                  text="Value")
+                elif ctype == "barh":
+                    fig = _px.bar(df_chart, x="Value", y="Category",
+                                  orientation="h", title=title,
+                                  color="Value",
+                                  color_continuous_scale="Viridis",
+                                  text="Value")
+                elif ctype == "pie":
+                    fig = _px.pie(df_chart, names="Category", values="Value",
+                                  title=title, hole=0.0)
+                elif ctype == "donut":
+                    fig = _px.pie(df_chart, names="Category", values="Value",
+                                  title=title, hole=0.5)
+                elif ctype == "line":
+                    fig = _px.line(df_chart, x="Category", y="Value",
+                                   title=title, markers=True)
+                elif ctype == "scatter":
+                    fig = _px.scatter(df_chart, x="Category", y="Value",
+                                      title=title, color="Value",
+                                      color_continuous_scale="Plasma")
+                elif ctype == "histogram":
+                    fig = _px.histogram(df_chart, x="Category", y="Value",
+                                        title=title)
+                else:
+                    fig = _px.bar(df_chart, x="Category", y="Value",
+                                  title=title, color="Value",
+                                  color_continuous_scale="Viridis",
+                                  text="Value")
+
+                fig.update_layout(
+                    title_font_size=16,
+                    title_x=0.5,
+                    margin=dict(l=20, r=20, t=60, b=20),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Could not render chart: {e}")
+
+        def _scroll_to_latest():
+            """Injects JS to auto-scroll the page to the newest chat message."""
+            st.markdown(
+                """
+                <script>
+                    setTimeout(function() {
+                        const containers = window.parent.document.querySelectorAll(
+                            'div[data-testid="stChatMessage"]'
+                        );
+                        if (containers.length > 0) {
+                            containers[containers.length - 1].scrollIntoView({
+                                behavior: "smooth",
+                                block: "center"
+                            });
+                        }
+                    }, 150);
+                </script>
+                """,
+                unsafe_allow_html=True,
+            )
 
         # ============================================================
         # Streaming helpers
@@ -1421,7 +1392,7 @@ CLOUD_MODEL   = "gpt-oss:20b"
                 model=model,
                 messages=messages,
                 stream=True,
-                options={"temperature": 0.3, "num_predict": 400},
+                options={"temperature": 0.3, "num_predict": 1500},
             )
             for chunk in stream:
                 piece = chunk.get("message", {}).get("content", "")
@@ -1429,7 +1400,7 @@ CLOUD_MODEL   = "gpt-oss:20b"
                     yield piece
 
         def _stream_cloud(model, messages, url, api_key):
-            import httpx, json
+            import httpx
             endpoint = url.rstrip("/") + "/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -1440,10 +1411,10 @@ CLOUD_MODEL   = "gpt-oss:20b"
                 "messages": messages,
                 "stream": True,
                 "temperature": 0.3,
-                "max_tokens": 400,
+                "max_tokens": 1500,
             }
             with httpx.stream("POST", endpoint, headers=headers,
-                              json=payload, timeout=120.0) as r:
+                              json=payload, timeout=180.0) as r:
                 r.raise_for_status()
                 for line in r.iter_lines():
                     if not line:
@@ -1453,7 +1424,7 @@ CLOUD_MODEL   = "gpt-oss:20b"
                     if line.strip() == "[DONE]":
                         break
                     try:
-                        data = json.loads(line)
+                        data = _json.loads(line)
                         delta = (data.get("choices", [{}])[0]
                                      .get("delta", {})
                                      .get("content", ""))
@@ -1463,64 +1434,190 @@ CLOUD_MODEL   = "gpt-oss:20b"
                         continue
 
         # ============================================================
-        # Chat input
+        # System prompts
         # ============================================================
-        user_prompt = st.chat_input("Ask something about today's outreach…")
+        _CHART_FORMAT = """```chart
+{"type": "<TYPE>", "title": "<TITLE>", "labels": ["<L1>", "<L2>"], "values": [<V1>, <V2>]}
+```"""
 
+        CHART_RULES = (
+            "CHART OUTPUT — ABSOLUTE RULES:\n"
+            "\n"
+            "This application renders charts AUTOMATICALLY from a JSON spec that YOU produce.\n"
+            "You are NOT a plain text assistant. You DO have chart rendering capability — "
+            "via the JSON block format below. The dashboard executes my JSON.\n"
+            "\n"
+            "When the user asks to plot, chart, graph, show, or visualize anything, "
+            "output EXACTLY ONE chart block in this JSON format:\n"
+            "\n"
+            "```chart\n"
+            '{"type": "<TYPE>", "title": "<TITLE>", "labels": ["<L1>", "<L2>"], "values": [<V1>, <V2>]}\n'
+            "```\n"
+            "\n"
+            "STRICTLY FORBIDDEN — you must NEVER:\n"
+            "- Write Python code (no `import matplotlib`, no `plt.bar`, no `plt.show`)\n"
+            "- Say \"I am text-based\" or \"I cannot display images/charts\"\n"
+            "- Produce ASCII art or Markdown tables as a chart substitute\n"
+            "- Tell the user to run the code themselves\n"
+            "- Output MORE THAN ONE chart block per response\n"
+            "\n"
+            "The ONLY valid chart output is the ```chart``` JSON block above.\n"
+            "\n"
+            "Chart types:\n"
+            "- \"bar\" — vertical bars (age groups, hours)\n"
+            "- \"barh\" — horizontal bars (diagnoses, drugs)\n"
+            "- \"pie\" — full pie (distributions)\n"
+            "- \"donut\" — pie with center hole\n"
+            "- \"line\" — time trends\n"
+            "- \"scatter\" — correlations\n"
+            "- \"histogram\" — value distributions\n"
+            "\n"
+            "Rules:\n"
+            "1. labels and values MUST be equal length.\n"
+            "2. Use REAL numbers from the CONTEXT for outreach data.\n"
+            "3. For general requests (\"generate data\"), invent reasonable values.\n"
+            "4. Add a short one-sentence intro before the block.\n"
+            "5. Output ONE chart only."
+        )
+
+        def _data_mode_prompt():
+            return (
+                "You are a healthcare analytics assistant for the COREP "
+                "annual medical outreach.\n\n"
+                "STRICT MODE: Answer ONLY from the context below. "
+                "Do not use outside knowledge.\n\n"
+                "CONTEXT (today's outreach data):\n"
+                + _build_context() + "\n\n"
+                "RULES:\n"
+                "1. Base all answers strictly on the context.\n"
+                "2. If the answer isn't in the context, say: "
+                "\"I don't have that information in today's data.\"\n"
+                "3. Never invent patient names, IDs, or specific individuals.\n"
+                "4. Include exact numbers when referencing data.\n"
+                "5. Keep text concise (2-4 sentences) unless asked for detail.\n\n"
+                + _CHART_RULES
+            )
+
+        def _general_mode_prompt():
+            return (
+                "You are a knowledgeable AI assistant for the COREP "
+                "annual medical outreach.\n\n"
+                "GENERAL MODE: Answer ANY question — programming, medicine, "
+                "science, math, general knowledge — AND questions about "
+                "today's outreach.\n\n"
+                "TODAY'S OUTREACH CONTEXT (use when relevant):\n"
+                + _build_context() + "\n\n"
+                "RULES:\n"
+                "1. Answer general questions naturally, accurately, helpfully.\n"
+                "2. When referring to today's outreach, use numbers from context.\n"
+                "3. Never invent patient names or IDs.\n"
+                "4. Use markdown (bold, bullets, code blocks, tables) when helpful.\n"
+                "5. For programming questions, include short ```python``` examples.\n"
+                "6. For medical advice, add a brief disclaimer.\n"
+                "7. Be concise.\n\n"
+                + _CHART_RULES
+            )
+
+        # ============================================================
+        # Layout — history → reply container → pinned input
+        # ============================================================
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                stored_chart = _extract_chart_block(msg["content"])
+                stored_text = _strip_chart_block(msg["content"])
+                if stored_text:
+                    st.markdown(stored_text)
+                if stored_chart:
+                    st.caption("📊 Chart")
+                    _render_chart(stored_chart)
+
+        reply_container = st.container()
+        input_container = st.container()
+
+        placeholder_text = (
+            "Ask about today's outreach data…"
+            if is_data_mode
+            else "Ask anything — or try *Plot the top 5 diagnoses*"
+        )
+        with input_container:
+            user_prompt = st.chat_input(placeholder_text)
+
+        # ============================================================
+        # Handle input
+        # ============================================================
         if user_prompt:
             st.session_state.chat_messages.append(
                 {"role": "user", "content": user_prompt}
             )
-            with st.chat_message("user"):
-                st.markdown(user_prompt)
+            with reply_container:
+                with st.chat_message("user"):
+                    st.markdown(user_prompt)
 
-            system_prompt = f"""You are a helpful healthcare analytics assistant for the COREP annual medical outreach program.
-
-You answer questions about today's outreach data based ONLY on the context below.
-
-CONTEXT:
-{_build_context()}
-
-RULES:
-1. Base answers strictly on the context above.
-2. If the answer isn't in the context, say "I don't have that information in today's data."
-3. Never invent patient names or IDs.
-4. Use bullet points for clarity.
-5. Keep answers concise (2–4 sentences).
-6. Include exact numbers when referencing data.
-"""
+            system_prompt = (
+                _data_mode_prompt() if is_data_mode else _general_mode_prompt()
+            )
 
             full_messages = [
                 {"role": "system", "content": system_prompt},
-                *[{"role": m["role"], "content": m["content"]}
-                  for m in st.session_state.chat_messages],
+                *[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.chat_messages
+                ],
             ]
 
-            with st.chat_message("assistant"):
-                placeholder = st.empty()
-                full_response = ""
-                try:
-                    if use_local:
-                        stream_iter = _stream_local(selected_model, full_messages)
-                    else:
-                        stream_iter = _stream_cloud(
-                            selected_model, full_messages,
-                            cloud_cfg["url"], cloud_cfg["api_key"],
+            with reply_container:
+                with st.chat_message("assistant"):
+                    placeholder = st.empty()
+                    full_response = ""
+                    try:
+                        stream_iter = (
+                            _stream_local(selected_model, full_messages)
+                            if use_local
+                            else _stream_cloud(
+                                selected_model, full_messages,
+                                cloud_cfg["url"], cloud_cfg["api_key"],
+                            )
                         )
 
-                    for piece in stream_iter:
-                        full_response += piece
-                        placeholder.markdown(full_response + "▌")
-                    placeholder.markdown(full_response)
-                except Exception as e:
-                    full_response = f"❌ Error: {e}"
-                    placeholder.error(full_response)
+                        # Stream visible text (chart block hidden during stream)
+                        chunk_count = 0
+                        for piece in stream_iter:
+                            full_response += piece
+                            visible = _strip_chart_block(full_response)
+                            placeholder.markdown(visible + " ▌")
+                            chunk_count += 1
+                            if chunk_count % 10 == 0:
+                                _scroll_to_latest()
 
-            st.session_state.chat_messages.append(
-                {"role": "assistant", "content": full_response}
-            )
+                        # Final extract + render
+                        chart_spec = _extract_chart_block(full_response)
+                        text_part = _strip_chart_block(full_response)
 
-        # ---- Footer actions ----
+                        placeholder.empty()
+                        if text_part:
+                            st.markdown(text_part)
+                        if chart_spec:
+                            st.caption("📊 AI-generated chart")
+                            _render_chart(chart_spec)
+
+                        st.session_state.chat_messages.append(
+                            {"role": "assistant", "content": full_response}
+                        )
+                    except Exception as e:
+                        full_response = f"❌ Error: {e}"
+                        placeholder.error(full_response)
+                        st.session_state.chat_messages.append(
+                            {"role": "assistant", "content": full_response}
+                        )
+
+            # Scroll to newest message, then rerun
+            _scroll_to_latest()
+            time.sleep(0.2)
+            st.rerun()
+
+        # ============================================================
+        # Footer actions
+        # ============================================================
         col_a, col_b = st.columns([1, 4])
         with col_a:
             if st.session_state.chat_messages:
@@ -1528,16 +1625,32 @@ RULES:
                     st.session_state.chat_messages = []
                     st.rerun()
 
+        # ============================================================
+        # Example prompts
+        # ============================================================
         with st.expander("💡 Try asking…", expanded=False):
-            st.markdown("""
+            if is_data_mode:
+                st.markdown("""
+**📊 Outreach Data mode:**
 - *"How many patients were registered today?"*
 - *"What is the gender split?"*
-- *"What are the top 5 diagnoses?"*
-- *"How many malaria tests came back positive?"*
-- *"Which drugs were dispensed the most?"*
-- *"Give me an executive summary for the COREP team."*
+- *"Plot the top 5 diagnoses as a bar chart."*
+- *"Show the gender split as a pie chart."*
+- *"Chart consultations by hour."*
+- *"Give me an executive summary."*
 """)
-
+            else:
+                st.markdown("""
+**🌍 General Knowledge mode:**
+- *"What is Python programming?"*
+- *"Explain machine learning in simple terms."*
+- *"Plot the top 5 diagnoses from the outreach data."*
+- *"Show gender split as a pie chart."*
+- *"Chart the age groups."*
+- *"Plot the top 10 drugs as horizontal bars."*
+- *"Write a Python function to calculate BMI."*
+- *"What are the symptoms of malaria?"*
+""")
 
 
 # ============================================================
