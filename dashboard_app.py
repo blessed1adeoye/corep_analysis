@@ -313,7 +313,7 @@ tabs = st.tabs([
     "📈 Trends",
     "📋 Tables",
     "🔮 Predict",
-    "🤖 Ask COREP AI",
+    "🤖 Ask BGIE AI",
 ])
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = tabs
 
@@ -1007,7 +1007,7 @@ API_URL = "https://my-api.onrender.com"
 
 
 # ------------------------------------------------------------
-# TAB 10 — ASK COREP AI (Dual-Mode Chat + Persistent Charts)
+# TAB 10 — ASK BGIE AI (Dual-Mode Chat + Persistent Charts)
 #   • Outreach Data mode — answers ONLY from today's data
 #   • General Knowledge mode — answers anything; charts via ```chart``` JSON
 #   • Provider: Local Ollama first, Ollama Cloud fallback
@@ -1016,7 +1016,7 @@ API_URL = "https://my-api.onrender.com"
 #   • Auto-scrolls to newest message
 # ------------------------------------------------------------
 with tab10:
-    st.markdown("### 🤖 Ask COREP AI")
+    st.markdown("### 🤖 Ask BGIE AI")
     st.caption(
         "Ask anything — about today's outreach data OR general questions. "
         "Try: *\"Plot the top 5 diagnoses\"* or *\"Show gender split as pie\"*."
@@ -1434,18 +1434,18 @@ CLOUD_MODEL   = "gpt-oss:20b"
                         continue
 
         # ============================================================
-        # System prompts
+        # System prompts (with chart rules)
         # ============================================================
         _CHART_FORMAT = """```chart
 {"type": "<TYPE>", "title": "<TITLE>", "labels": ["<L1>", "<L2>"], "values": [<V1>, <V2>]}
 ```"""
 
-        CHART_RULES = (
+        _CHART_RULES = (
             "CHART OUTPUT — ABSOLUTE RULES:\n"
             "\n"
             "This application renders charts AUTOMATICALLY from a JSON spec that YOU produce.\n"
             "You are NOT a plain text assistant. You DO have chart rendering capability — "
-            "via the JSON block format below. The dashboard executes my JSON.\n"
+            "via the JSON block format below. The dashboard executes your JSON.\n"
             "\n"
             "When the user asks to plot, chart, graph, show, or visualize anything, "
             "output EXACTLY ONE chart block in this JSON format:\n"
@@ -1579,7 +1579,6 @@ CLOUD_MODEL   = "gpt-oss:20b"
                             )
                         )
 
-                        # Stream visible text (chart block hidden during stream)
                         chunk_count = 0
                         for piece in stream_iter:
                             full_response += piece
@@ -1589,7 +1588,6 @@ CLOUD_MODEL   = "gpt-oss:20b"
                             if chunk_count % 10 == 0:
                                 _scroll_to_latest()
 
-                        # Final extract + render
                         chart_spec = _extract_chart_block(full_response)
                         text_part = _strip_chart_block(full_response)
 
@@ -1610,7 +1608,6 @@ CLOUD_MODEL   = "gpt-oss:20b"
                             {"role": "assistant", "content": full_response}
                         )
 
-            # Scroll to newest message, then rerun
             _scroll_to_latest()
             time.sleep(0.2)
             st.rerun()
