@@ -100,3 +100,5 @@ output.paste(img, (0, 0), mask=circ_mask)
 
 output.save(OUTPUT, "PNG")
 print(f"✅ Circular logo saved → {OUTPUT}")
+
+

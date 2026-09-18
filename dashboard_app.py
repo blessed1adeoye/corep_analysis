@@ -19,6 +19,7 @@ from branding import (
     LOGO_PATH, DEVELOPER_NAME, COMPANY_NAME,
 )
 import httpx
+import ollama
 
 
 # import streamlit as st
@@ -341,8 +342,9 @@ tabs = st.tabs([
     "📈 Trends",
     "📋 Tables",
     "🔮 Predict",
+    "🤖 Ask COREP AI",
 ])
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = tabs
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = tabs
 
 
 # ------------------------------------------------------------
@@ -1045,6 +1047,498 @@ API_URL = "https://your-api.onrender.com"
                         file_name="batch_predictions.csv",
                         mime="text/csv",
                     )
+
+
+# # ------------------------------------------------------------
+# # TAB 10 — ASK COREP AI (LLM Chat)
+# # ------------------------------------------------------------
+# with tab10:
+#     st.markdown("### 🤖 Ask COREP AI")
+#     st.caption(
+#         "Ask questions about today's outreach data in natural language. "
+#         "Powered by a local LLM via Ollama — your data never leaves your machine."
+#     )
+
+#     # ---- Ollama availability check ----
+#     @st.cache_data(ttl=60, show_spinner=False)
+#     def _ollama_models():
+#         try:
+#             result = ollama.list()
+#             return [m.get("name", m.get("model", "unknown"))
+#                     for m in result.get("models", [])]
+#         except Exception:
+#             return []
+
+#     available_models = _ollama_models()
+
+#     if not available_models:
+#         st.warning(
+#             "⚠️ **Ollama is not running** or no models are installed.\n\n"
+#             "This tab uses a local LLM to answer questions about your data. "
+#             "Set it up on your machine with the commands below, then refresh."
+#         )
+#         st.code("""
+# # 1. Install Ollama → https://ollama.com/download
+
+# # 2. Start the Ollama service (keep this terminal open)
+# ollama serve
+
+# # 3. Pull a lightweight model (choose one)
+# ollama pull llama3.2       # ~2 GB — fast, good for Q&A
+# ollama pull phi3           # ~2.5 GB — smaller, faster
+# ollama pull mistral        # ~4 GB — higher quality
+# """, language="bash")
+
+#         st.info(
+#             "💡 **Note for cloud deployment:** Ollama runs on your local machine, "
+#             "so this tab works when you run the dashboard locally with "
+#             "`streamlit run dashboard_app.py`. On Streamlit Cloud it will show this message."
+#         )
+#     else:
+#         # ---- Model selector ----
+#         default_model = next(
+#             (m for m in available_models if "llama3.2" in m.lower()),
+#             available_models[0],
+#         )
+#         selected_model = st.selectbox(
+#             "🧠 Model",
+#             options=available_models,
+#             index=available_models.index(default_model),
+#             help="Smaller models respond faster; larger models are more accurate.",
+#         )
+
+#         # ---- Build context from the currently filtered data ----
+#         def _build_context():
+#             lines = []
+#             lines.append(f"Today's outreach summary:")
+#             lines.append(f"- Total patients registered: {len(flt)}")
+#             lines.append(f"- Total consultations: {len(cons)}")
+#             lines.append(f"- Total lab tests: {len(lab)}")
+#             lines.append(f"- Total optical assessments: {len(opt)}")
+#             lines.append(f"- Total pharmacy orders: {len(ph)}")
+#             lines.append(f"- Total nursing assessments: {len(nurse)}")
+
+#             if not flt.empty and "Gender" in flt.columns:
+#                 gc = flt["Gender"].value_counts().to_dict()
+#                 lines.append(f"- Gender distribution: {gc}")
+
+#             if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
+#                 lines.append(f"- Average age: {flt['Age'].mean():.1f} years")
+
+#             if not flt.empty and "Age Group" in flt.columns:
+#                 ag = flt["Age Group"].value_counts().sort_index().to_dict()
+#                 lines.append(f"- Age groups: {ag}")
+
+#             if not cons.empty and "Diagnosis" in cons.columns:
+#                 top_dx = cons["Diagnosis"].value_counts().head(10).to_dict()
+#                 lines.append(f"- Top 10 diagnoses: {top_dx}")
+
+#             if not lab.empty and "Malaria Parasite" in lab.columns:
+#                 pos = lab["Malaria Parasite"].astype(str).str.lower().isin(
+#                     ["positive", "pos", "reactive", "+", "1", "true"]
+#                 ).sum()
+#                 lines.append(f"- Malaria positive tests: {pos} out of {len(lab)}")
+
+#             if not ph.empty and "Drug Name" in ph.columns:
+#                 try:
+#                     from main_analysis import filter_real_drugs
+#                     names = filter_real_drugs(ph["Drug Name"])
+#                     top_drugs = names.value_counts().head(10).to_dict()
+#                     lines.append(f"- Top 10 dispensed drugs: {top_drugs}")
+#                 except Exception:
+#                     pass
+
+#             if not nurse.empty:
+#                 vitals = [c for c in ["Blood Pressure Systolic", "Temperature",
+#                                        "Pulse Rate", "Oxygen Saturation"]
+#                           if c in nurse.columns]
+#                 for v in vitals:
+#                     if nurse[v].notna().any():
+#                         lines.append(f"- Mean {v}: {nurse[v].mean():.1f}")
+
+#             return "\n".join(lines)
+
+#         # ---- Session state for chat history ----
+#         if "chat_messages" not in st.session_state:
+#             st.session_state.chat_messages = []
+
+#         # ---- Context display (collapsible) ----
+#         with st.expander("📋 View data context sent to the AI", expanded=False):
+#             st.code(_build_context(), language="text")
+
+#         # ---- Render conversation history ----
+#         for msg in st.session_state.chat_messages:
+#             with st.chat_message(msg["role"]):
+#                 st.markdown(msg["content"])
+
+#         # ---- Chat input ----
+#         user_prompt = st.chat_input("Ask something about today's outreach…")
+
+#         if user_prompt:
+#             # Show and store user message
+#             st.session_state.chat_messages.append(
+#                 {"role": "user", "content": user_prompt}
+#             )
+#             with st.chat_message("user"):
+#                 st.markdown(user_prompt)
+
+#             # Build system prompt with data context
+#             system_prompt = f"""You are a helpful healthcare analytics assistant for the COREP annual medical outreach program.
+
+# You answer questions about today's outreach data based ONLY on the context provided below.
+
+# CONTEXT (today's outreach data):
+# {_build_context()}
+
+# RULES:
+# 1. Base all answers strictly on the context above.
+# 2. If the answer isn't in the context, say "I don't have that information in today's data."
+# 3. Never invent patient names, IDs, or specific individuals.
+# 4. Use bullet points or short paragraphs for clarity.
+# 5. Keep responses concise — 2-4 sentences unless the user asks for detail.
+# 6. When referencing numbers, include the exact figure from the context.
+# """
+
+#             # Stream the LLM response
+#             with st.chat_message("assistant"):
+#                 placeholder = st.empty()
+#                 full_response = ""
+#                 try:
+#                     stream = ollama.chat(
+#                         model=selected_model,
+#                         messages=[
+#                             {"role": "system", "content": system_prompt},
+#                             *[
+#                                 {"role": m["role"], "content": m["content"]}
+#                                 for m in st.session_state.chat_messages
+#                             ],
+#                         ],
+#                         stream=True,
+#                         options={
+#                             "temperature": 0.3,   # factual, less creative
+#                             "num_predict": 400,   # cap response length
+#                         },
+#                     )
+#                     for chunk in stream:
+#                         piece = chunk.get("message", {}).get("content", "")
+#                         if piece:
+#                             full_response += piece
+#                             placeholder.markdown(full_response + "▌")
+#                     placeholder.markdown(full_response)
+#                 except Exception as e:
+#                     full_response = f"❌ Error: {e}"
+#                     placeholder.error(full_response)
+
+#             st.session_state.chat_messages.append(
+#                 {"role": "assistant", "content": full_response}
+#             )
+
+#         # ---- Footer actions ----
+#         col_a, col_b = st.columns([1, 4])
+#         with col_a:
+#             if st.session_state.chat_messages:
+#                 if st.button("🗑️ Clear chat", use_container_width=True):
+#                     st.session_state.chat_messages = []
+#                     st.rerun()
+
+#         # ---- Example prompts ----
+#         with st.expander("💡 Try asking…", expanded=False):
+#             st.markdown("""
+# - *"How many patients were registered today?"*
+# - *"What is the gender split?"*
+# - *"What are the top 5 diagnoses?"*
+# - *"How many malaria tests came back positive?"*
+# - *"Which drugs were dispensed the most?"*
+# - *"What is the average age of patients?"*
+# - *"Summarize today's outreach in 3 sentences."*
+# - *"What percentage of patients had malaria?"*
+# - *"Which age group had the most patients?"*
+# - *"Give me an executive summary for the COREP team."*
+# """)
+
+# ------------------------------------------------------------
+# TAB 10 — ASK COREP AI (LLM Chat — local Ollama + Ollama Cloud)
+# ------------------------------------------------------------
+with tab10:
+    st.markdown("### 🤖 Ask COREP AI")
+    st.caption(
+        "Ask questions about today's outreach data in natural language. "
+        "Powered by Ollama — local when available, cloud as fallback."
+    )
+
+    # ============================================================
+    # Provider detection
+    # ============================================================
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _local_ollama_models():
+        try:
+            result = ollama.list()
+            return [m.get("name", m.get("model", "unknown"))
+                    for m in result.get("models", [])]
+        except Exception:
+            return []
+
+    def _cloud_config():
+        """Read cloud config from Streamlit secrets, fall back to env vars."""
+        def _get(key, default=""):
+            try:
+                return st.secrets.get(key, default)
+            except Exception:
+                import os
+                return os.environ.get(key, default)
+
+        return {
+            "enabled": str(_get("CLOUD_ENABLED", "false")).lower() == "true",
+            "url":     _get("CLOUD_URL", "https://ollama.com/v1"),
+            "api_key": _get("CLOUD_API_KEY", ""),
+            "model":   _get("CLOUD_MODEL", "gpt-oss:20b"),
+        }
+
+    local_models = _local_ollama_models()
+    cloud_cfg = _cloud_config()
+
+    has_local = len(local_models) > 0
+    has_cloud = bool(cloud_cfg["enabled"] and cloud_cfg["url"] and cloud_cfg["api_key"])
+
+    if not has_local and not has_cloud:
+        st.warning(
+            "⚠️ **No LLM provider available.** "
+            "Set up local Ollama or configure Ollama Cloud in Streamlit secrets."
+        )
+        st.markdown("#### Local setup")
+        st.code("""
+ollama serve
+ollama pull llama3.2
+""", language="bash")
+        st.markdown("#### Cloud setup (Streamlit Cloud → Settings → Secrets)")
+        st.code("""
+CLOUD_ENABLED = "true"
+CLOUD_URL     = "https://ollama.com/v1"
+CLOUD_API_KEY = "your-ollama-cloud-key"
+CLOUD_MODEL   = "gpt-oss:20b"
+""", language="toml")
+    else:
+        # ---- Provider selector ----
+        providers = []
+        if has_local:
+            providers.append("🖥️ Local Ollama (fast, private)")
+        if has_cloud:
+            providers.append("☁️ Ollama Cloud (works everywhere)")
+
+        provider = st.radio(
+            "⚡ Provider",
+            options=providers,
+            index=0,
+            horizontal=True,
+            help="Local is fastest; Cloud works on Streamlit Cloud too.",
+        )
+        use_local = provider.startswith("🖥️")
+
+        # ---- Model selector ----
+        if use_local:
+            selected_model = st.selectbox(
+                "🧠 Model",
+                options=local_models,
+                index=next(
+                    (i for i, m in enumerate(local_models)
+                     if "llama3.2" in m.lower()),
+                    0,
+                ),
+            )
+        else:
+            cloud_models = [
+                "gpt-oss:20b",           # ⭐ recommended
+                "gpt-oss:120b",
+                "glm-5.3-flash",         # fastest
+                "deepseek-v4.1-flash",
+                "nemotron-3-nano:30b",
+                "gemma4:31b",
+                "kimi-k2.6",
+                "mistral-large-3:675b",
+                "glm-5.3",
+                "qwen3.5:397b",
+            ]
+            default_idx = 0
+            if cloud_cfg["model"] in cloud_models:
+                default_idx = cloud_models.index(cloud_cfg["model"])
+            selected_model = st.selectbox(
+                "🧠 Model",
+                options=cloud_models,
+                index=default_idx,
+                help="Cloud models from your Ollama plan.",
+            )
+
+        # ============================================================
+        # Context builder (same as before)
+        # ============================================================
+        def _build_context():
+            lines = ["Today's outreach summary:"]
+            lines.append(f"- Total patients registered: {len(flt)}")
+            lines.append(f"- Total consultations: {len(cons)}")
+            lines.append(f"- Total lab tests: {len(lab)}")
+            lines.append(f"- Total optical assessments: {len(opt)}")
+            lines.append(f"- Total pharmacy orders: {len(ph)}")
+            lines.append(f"- Total nursing assessments: {len(nurse)}")
+
+            if not flt.empty and "Gender" in flt.columns:
+                lines.append(f"- Gender distribution: {flt['Gender'].value_counts().to_dict()}")
+            if not flt.empty and "Age" in flt.columns and flt["Age"].notna().any():
+                lines.append(f"- Average age: {flt['Age'].mean():.1f} years")
+            if not flt.empty and "Age Group" in flt.columns:
+                lines.append(f"- Age groups: {flt['Age Group'].value_counts().sort_index().to_dict()}")
+            if not cons.empty and "Diagnosis" in cons.columns:
+                lines.append(f"- Top 10 diagnoses: {cons['Diagnosis'].value_counts().head(10).to_dict()}")
+            if not lab.empty and "Malaria Parasite" in lab.columns:
+                pos = lab["Malaria Parasite"].astype(str).str.lower().isin(
+                    ["positive", "pos", "reactive", "+", "1", "true"]).sum()
+                lines.append(f"- Malaria positive tests: {pos} out of {len(lab)}")
+            if not ph.empty and "Drug Name" in ph.columns:
+                try:
+                    from main_analysis import filter_real_drugs
+                    names = filter_real_drugs(ph["Drug Name"])
+                    lines.append(f"- Top 10 dispensed drugs: {names.value_counts().head(10).to_dict()}")
+                except Exception:
+                    pass
+            return "\n".join(lines)
+
+        # ---- Session state ----
+        if "chat_messages" not in st.session_state:
+            st.session_state.chat_messages = []
+
+        with st.expander("📋 View data context sent to the AI", expanded=False):
+            st.code(_build_context(), language="text")
+
+        # ---- Render history ----
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # ============================================================
+        # Streaming helpers
+        # ============================================================
+        def _stream_local(model, messages):
+            stream = ollama.chat(
+                model=model,
+                messages=messages,
+                stream=True,
+                options={"temperature": 0.3, "num_predict": 400},
+            )
+            for chunk in stream:
+                piece = chunk.get("message", {}).get("content", "")
+                if piece:
+                    yield piece
+
+        def _stream_cloud(model, messages, url, api_key):
+            import httpx, json
+            endpoint = url.rstrip("/") + "/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "temperature": 0.3,
+                "max_tokens": 400,
+            }
+            with httpx.stream("POST", endpoint, headers=headers,
+                              json=payload, timeout=120.0) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line.strip() == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(line)
+                        delta = (data.get("choices", [{}])[0]
+                                     .get("delta", {})
+                                     .get("content", ""))
+                        if delta:
+                            yield delta
+                    except Exception:
+                        continue
+
+        # ============================================================
+        # Chat input
+        # ============================================================
+        user_prompt = st.chat_input("Ask something about today's outreach…")
+
+        if user_prompt:
+            st.session_state.chat_messages.append(
+                {"role": "user", "content": user_prompt}
+            )
+            with st.chat_message("user"):
+                st.markdown(user_prompt)
+
+            system_prompt = f"""You are a helpful healthcare analytics assistant for the COREP annual medical outreach program.
+
+You answer questions about today's outreach data based ONLY on the context below.
+
+CONTEXT:
+{_build_context()}
+
+RULES:
+1. Base answers strictly on the context above.
+2. If the answer isn't in the context, say "I don't have that information in today's data."
+3. Never invent patient names or IDs.
+4. Use bullet points for clarity.
+5. Keep answers concise (2–4 sentences).
+6. Include exact numbers when referencing data.
+"""
+
+            full_messages = [
+                {"role": "system", "content": system_prompt},
+                *[{"role": m["role"], "content": m["content"]}
+                  for m in st.session_state.chat_messages],
+            ]
+
+            with st.chat_message("assistant"):
+                placeholder = st.empty()
+                full_response = ""
+                try:
+                    if use_local:
+                        stream_iter = _stream_local(selected_model, full_messages)
+                    else:
+                        stream_iter = _stream_cloud(
+                            selected_model, full_messages,
+                            cloud_cfg["url"], cloud_cfg["api_key"],
+                        )
+
+                    for piece in stream_iter:
+                        full_response += piece
+                        placeholder.markdown(full_response + "▌")
+                    placeholder.markdown(full_response)
+                except Exception as e:
+                    full_response = f"❌ Error: {e}"
+                    placeholder.error(full_response)
+
+            st.session_state.chat_messages.append(
+                {"role": "assistant", "content": full_response}
+            )
+
+        # ---- Footer actions ----
+        col_a, col_b = st.columns([1, 4])
+        with col_a:
+            if st.session_state.chat_messages:
+                if st.button("🗑️ Clear chat", use_container_width=True):
+                    st.session_state.chat_messages = []
+                    st.rerun()
+
+        with st.expander("💡 Try asking…", expanded=False):
+            st.markdown("""
+- *"How many patients were registered today?"*
+- *"What is the gender split?"*
+- *"What are the top 5 diagnoses?"*
+- *"How many malaria tests came back positive?"*
+- *"Which drugs were dispensed the most?"*
+- *"Give me an executive summary for the COREP team."*
+""")
+
+
 
 # ============================================================
 # Main footer (branded)
