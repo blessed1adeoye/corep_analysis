@@ -70,6 +70,14 @@
 - Heuristic fallback so it works even without trained models
 - Interactive Swagger UI at `/docs`
 
+
+
+### 🔄 Always-On Reliability
+
+![Cron Job](assets/screenshots/cron-job.png)
+
+*The API is kept warm by a 5-minute health check via cron-job.org — no cold starts, ever.*
+
 ---
 
 ## 🛠️ Tech Stack

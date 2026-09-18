@@ -46,6 +46,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Brand logo — renders in the top-left and sidebar
+try:
+    st.logo(
+        "assets/logo.png",
+        size="large",
+        link="https://github.com/blessed1adeoye/corep_analysis",
+    )
+except Exception as e:
+    st.sidebar.warning(f"Logo not found: {e}")
+
 # ============================================================
 # API Configuration
 # ============================================================
