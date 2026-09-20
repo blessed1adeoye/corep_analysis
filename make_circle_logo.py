@@ -7,7 +7,7 @@
 
 # from PIL import Image, ImageDraw, ImageOps
 
-# INPUT = "assets/logo.png"          # your current logo
+# INPUT = "assets/logo.png"          # my current logo
 # OUTPUT = "assets/logo_circle.png"  # new circular version
 # SIZE = 512                          # output size (square canvas)
 

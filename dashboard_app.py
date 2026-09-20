@@ -187,7 +187,7 @@ def _outreach_date(patient):
 st.markdown(f"""
 <div class="outreach-banner">
     <h2>🏥 COREP Medical Outreach Dashboard {TRADEMARK}</h2>
-    <p>Single-day clinical outreach · {_outreach_date(data['patient'])} ·
+    <p>Single-day Medical outreach · {_outreach_date(data['patient'])} ·
     Interactive analysis of patients, consultations, labs, optical, pharmacy &amp; vitals.</p>
     <p style="margin-top:8px; font-size:0.85rem; opacity:0.9;">
         {DEVELOPER_LINE_FULL}
@@ -1445,7 +1445,7 @@ CLOUD_MODEL   = "gpt-oss:20b"
             "\n"
             "This application renders charts AUTOMATICALLY from a JSON spec that YOU produce.\n"
             "You are NOT a plain text assistant. You DO have chart rendering capability — "
-            "via the JSON block format below. The dashboard executes your JSON.\n"
+            "via the JSON block format below. The dashboard executes my JSON.\n"
             "\n"
             "When the user asks to plot, chart, graph, show, or visualize anything, "
             "output EXACTLY ONE chart block in this JSON format:\n"
