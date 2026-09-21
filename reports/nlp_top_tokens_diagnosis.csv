@@ -1,15 +1,13 @@
 token,count
 malaria,34
 arthritis,21
+hypertension,18
 pain,13
-hypertension,12
 allergy,10
 osteoarthritis,6
 knee,6
-htn,6
 stress,5
 eye,5
-pud,4
 parasite,4
 post,4
 stable,4
@@ -17,9 +15,11 @@ polyarthritis,3
 infection,3
 refractive,3
 error,3
+pud,3
 fever,3
 hepatitis,3
 anxiety,3
+ulcer,3
 insomnia,3
 cataract,2
 tract,2
@@ -34,7 +34,6 @@ disorder,2
 result,2
 conjunctivitis,2
 hypertensive,2
-ulcer,2
 rti,2
 taenia,2
 pneumonia,2
@@ -79,6 +78,8 @@ menopause,1
 syndrome,1
 amenorrhoea,1
 posy,1
+pelvic,1
+disease,1
 poty,1
 bpe,1
 capitus,1

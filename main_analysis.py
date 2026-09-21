@@ -2,6 +2,7 @@
 COREP Data Analysis — Complete Pipeline
 - Auto-detects sheet names (handles 'patient' vs 'Patients' etc.)
 - Cleans data safely
+- Normalizes clinical diagnosis text (HTN → Hypertension, splits multi-diagnosis cells)
 - Generates and SAVES every chart to ./charts/
 - Filters placeholder drug values (e.g. "Prescription from Treatment Plan")
 - Adds brand watermark to every chart
@@ -20,6 +21,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from branding import BRAND_LINE, WATERMARK
+from diagnosis_cleaner import clean_diagnosis_column
 
 warnings.filterwarnings("ignore")
 sns.set_style("whitegrid")
@@ -185,6 +187,7 @@ def clean_all(data):
             continue
         data[k] = clean(df, date_map.get(k, []))
 
+    # ---------- Patient: Age derivation ----------
     p = data.get("patient")
     if p is not None and not p.empty and "Date Of Birth" in p.columns:
         today = pd.Timestamp.today()
@@ -193,11 +196,79 @@ def clean_all(data):
         labels = ["0-5", "6-12", "13-18", "19-35", "36-50", "51-65", "65+"]
         p["Age Group"] = pd.cut(p["Age"], bins=bins, labels=labels)
         data["patient"] = p
+
+    # ---------- Consultations: Diagnosis normalization ----------
+    cons = data.get("consultations")
+    if cons is not None and not cons.empty and "Diagnosis" in cons.columns:
+        try:
+            cons_clean, cons_long = clean_diagnosis_column(cons, column="Diagnosis")
+            data["consultations"] = cons_clean
+            data["diagnoses_long"] = cons_long
+            print(f"  ✅ Diagnosis normalization applied "
+                  f"({len(cons_long)} individual diagnosis records)")
+        except Exception as e:
+            print(f"  ⚠️  Diagnosis normalization failed: {e}")
+
     return data
 
 
 # ============================================================
-# Charts (same as before — kept short here)
+# Chart helpers
+# ============================================================
+def _get_diagnosis_series(consultations, data=None):
+    """
+    Return a Series with individual diagnoses (already split + normalized).
+    Priority:
+      1. Long format diagnoses from clean_all (best — multi-diagnosis split)
+      2. Diagnosis_Clean column (fallback)
+      3. Diagnosis column (last resort)
+    """
+    if data and "diagnoses_long" in data and not data["diagnoses_long"].empty:
+        return data["diagnoses_long"]["Diagnosis"]
+    if consultations is not None and not consultations.empty:
+        if "Diagnosis_Clean" in consultations.columns:
+            return consultations["Diagnosis_Clean"].dropna()
+        if "Diagnosis" in consultations.columns:
+            return consultations["Diagnosis"].dropna()
+    return pd.Series(dtype=str)
+
+
+def _explode_diagnoses(consultations, data=None, extra_cols=()):
+    """
+    Return a long-format DataFrame:
+      one row per (consultation, individual diagnosis).
+    Extra columns (e.g. Patient Id, Gender, Age Group) are preserved.
+    """
+    if consultations is None or consultations.empty:
+        return pd.DataFrame()
+
+    keep = ["Id", "Patient Id"] + [c for c in extra_cols if c in consultations.columns]
+    keep = [c for c in keep if c in consultations.columns]
+
+    # If we have Diagnosis_Clean, split its pipe-delimited values
+    if "Diagnosis_Clean" in consultations.columns:
+        rows = []
+        for _, row in consultations.iterrows():
+            cell = row.get("Diagnosis_Clean")
+            if pd.isna(cell) or not str(cell).strip():
+                continue
+            for d in str(cell).split(" | "):
+                r = {k: row[k] for k in keep}
+                r["Diagnosis"] = d.strip()
+                rows.append(r)
+        return pd.DataFrame(rows)
+
+    # Fallback — no cleaning applied
+    if "Diagnosis" in consultations.columns:
+        df = consultations[keep + ["Diagnosis"]].copy()
+        df = df.dropna(subset=["Diagnosis"])
+        return df
+
+    return pd.DataFrame()
+
+
+# ============================================================
+# Charts
 # ============================================================
 def chart_patient_demographics(patient):
     if patient is None or patient.empty:
@@ -292,33 +363,52 @@ def chart_vitals(nursing):
     plt.tight_layout(); save_chart("biohazard_isolation", fig)
 
 
-def chart_consultations(consultations, patient):
-    if consultations is None or consultations.empty or "Diagnosis" not in consultations.columns:
+def chart_consultations(consultations, patient, data=None):
+    if consultations is None or consultations.empty:
         return
-    top_diag = consultations["Diagnosis"].value_counts().head(15)
+
+    # ---------- Top 15 Diagnoses (using normalized, split diagnoses) ----------
+    diag_series = _get_diagnosis_series(consultations, data)
+    if diag_series.empty:
+        return
+
+    top_diag = diag_series.value_counts().head(15)
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.barplot(y=top_diag.index, x=top_diag.values, palette="magma", ax=ax)
     ax.set_title("Top 15 Diagnoses")
     plt.tight_layout(); save_chart("top15_diagnoses", fig)
 
+    # ---------- Diagnoses by Gender ----------
     pat_slice = _safe_patient_slice(patient, ["Id", "Age", "Gender", "Age Group"])
-    if (not pat_slice.empty and "Patient Id" in consultations.columns
-            and "Id" in pat_slice.columns):
-        cons_p = consultations.merge(pat_slice, left_on="Patient Id",
-                                      right_on="Id", suffixes=("", "_pat"), how="left")
-    else:
-        cons_p = consultations.copy()
+    if not pat_slice.empty and "Patient Id" in consultations.columns:
+        exploded = _explode_diagnoses(
+            consultations, data,
+            extra_cols=["Patient Id"]
+        )
+        if not exploded.empty:
+            merged = exploded.merge(pat_slice, left_on="Patient Id",
+                                     right_on="Id", how="left",
+                                     suffixes=("", "_pat"))
+            top10 = top_diag.head(10).index
+            sub = merged[merged["Diagnosis"].isin(top10)]
+            if "Gender" in sub.columns and sub["Gender"].notna().any():
+                ct = pd.crosstab(sub["Diagnosis"], sub["Gender"])
+                if not ct.empty:
+                    fig, ax = plt.subplots(figsize=(12, 7))
+                    ct.plot(kind="barh", stacked=True, colormap="Set2", ax=ax)
+                    ax.set_title("Top 10 Diagnoses by Gender")
+                    plt.tight_layout(); save_chart("diagnoses_by_gender", fig)
 
-    if "Gender" in cons_p.columns and cons_p["Gender"].notna().any():
-        top10 = top_diag.head(10).index
-        sub = cons_p[cons_p["Diagnosis"].isin(top10)]
-        ct = pd.crosstab(sub["Diagnosis"], sub["Gender"])
-        if not ct.empty:
-            fig, ax = plt.subplots(figsize=(12, 7))
-            ct.plot(kind="barh", stacked=True, colormap="Set2", ax=ax)
-            ax.set_title("Top 10 Diagnoses by Gender")
-            plt.tight_layout(); save_chart("diagnoses_by_gender", fig)
+            # ---------- Diagnoses by Age Group ----------
+            if "Age Group" in sub.columns and sub["Age Group"].notna().any():
+                ct2 = pd.crosstab(sub["Diagnosis"], sub["Age Group"])
+                if not ct2.empty:
+                    fig, ax = plt.subplots(figsize=(12, 7))
+                    ct2.plot(kind="barh", stacked=True, colormap="tab20", ax=ax)
+                    ax.set_title("Top 10 Diagnoses by Age Group")
+                    plt.tight_layout(); save_chart("diagnoses_by_age", fig)
 
+    # ---------- Referrals ----------
     referrals = [c for c in ["Refer To Pharmacy", "Refer To Laboratory",
                              "Refer To Optician", "Refer To Specialist"]
                  if c in consultations.columns]
@@ -332,6 +422,7 @@ def chart_consultations(consultations, patient):
         ax.set_title("Referral Distribution"); plt.xticks(rotation=30)
         plt.tight_layout(); save_chart("referrals", fig)
 
+    # ---------- Time-based charts ----------
     if "Created At" in consultations.columns and consultations["Created At"].notna().any():
         cons = consultations.copy()
         cons["Month"] = cons["Created At"].dt.to_period("M").astype(str)
@@ -462,13 +553,23 @@ def run():
     for k, df in data.items():
         status = "✅" if (df is not None and not df.empty) else "❌ empty"
         n = 0 if df is None else len(df)
-        print(f"   {k:15s} {status}  ({n} rows)")
+        print(f"   {k:18s} {status}  ({n} rows)")
+
+    # Diagnostic — show top normalized diagnoses for verification
+    if "diagnoses_long" in data and not data["diagnoses_long"].empty:
+        print("\n🔬 Top 10 normalized diagnoses (sanity check):")
+        top = data["diagnoses_long"]["Diagnosis"].value_counts().head(10)
+        for dx, count in top.items():
+            print(f"   {dx:40s} {count}")
+        print()
+
     print("\n📊 Generating charts ...")
     jobs = [
         ("patient_demographics", lambda: chart_patient_demographics(data["patient"])),
         ("registration_trends",  lambda: chart_registration_trends(data["patient"])),
         ("vitals",               lambda: chart_vitals(data["nursing"])),
-        ("consultations",        lambda: chart_consultations(data["consultations"], data["patient"])),
+        ("consultations",        lambda: chart_consultations(
+                                    data["consultations"], data["patient"], data)),
         ("lab_tests",            lambda: chart_lab_tests(data["lab_tests"])),
         ("optical",              lambda: chart_optical(data["optical"])),
         ("pharmacy",             lambda: chart_pharmacy(data["pharmacy"], data["drugs"])),
