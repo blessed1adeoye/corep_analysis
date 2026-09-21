@@ -13,6 +13,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from main_analysis import filter_real_drugs, _match_sheet, EXCEL_FILE
+from diagnosis_cleaner import normalize_multi_diagnoses        # ← NEW
+
 from branding import (
     BRAND_LINE, BRAND_LINE_FULL,
     DEVELOPER_LINE, DEVELOPER_LINE_FULL, DEVELOPER_LINE_SHORT,
@@ -142,6 +144,17 @@ def load():
             data[key] = pd.read_excel(xls, sheet_name=matched) if matched else pd.DataFrame()
         except Exception:
             data[key] = pd.DataFrame()
+
+    # --------------------------------------------------------
+    # Apply diagnosis normalization (same logic as main_analysis)
+    # --------------------------------------------------------
+    cons = data.get("consultations", pd.DataFrame())
+    if not cons.empty and "Diagnosis" in cons.columns:
+        try:
+            cons["Diagnosis_Clean"] = cons["Diagnosis"].apply(normalize_multi_diagnoses)
+        except Exception as e:
+            print(f"Diagnosis normalization failed: {e}")
+        data["consultations"] = cons
 
     # Derive Age
     p = data["patient"]
@@ -385,14 +398,43 @@ with tab1:
 
 
 # ------------------------------------------------------------
-# TAB 2 — CONSULTATIONS
+# TAB 2 — CONSULTATIONS (with normalized diagnoses)
 # ------------------------------------------------------------
 with tab2:
     if cons.empty:
         st.info("No consultation data in current filter.")
     else:
-        if "Diagnosis" in cons.columns and cons["Diagnosis"].notna().any():
-            top = cons["Diagnosis"].value_counts().head(15).reset_index()
+        # ============================================================
+        # Helper: explode normalized diagnosis column into long format
+        # ============================================================
+        def _explode_diagnoses(df, extra_cols=()):
+            if df is None or df.empty:
+                return pd.DataFrame()
+            diag_col = "Diagnosis_Clean" if "Diagnosis_Clean" in df.columns else "Diagnosis"
+            keep = ["Id", "Patient Id"] + [c for c in extra_cols if c in df.columns]
+            keep = [c for c in keep if c in df.columns]
+            rows = []
+            for _, row in df.iterrows():
+                cell = row.get(diag_col)
+                if pd.isna(cell) or not str(cell).strip():
+                    continue
+                for d in str(cell).split(" | "):
+                    d = d.strip()
+                    if not d:
+                        continue
+                    r = {k: row[k] for k in keep}
+                    r["Diagnosis"] = d
+                    rows.append(r)
+            return pd.DataFrame(rows)
+
+        # ============================================================
+        # Top 15 Diagnoses — counts each diagnosis separately
+        # ============================================================
+        dx_df = _explode_diagnoses(cons, extra_cols=["Patient Id"])
+        if dx_df.empty:
+            st.info("No diagnosis data available.")
+        else:
+            top = dx_df["Diagnosis"].value_counts().head(15).reset_index()
             top.columns = ["Diagnosis", "Count"]
             st.plotly_chart(
                 px.bar(top, x="Count", y="Diagnosis", orientation="h",
@@ -400,14 +442,18 @@ with tab2:
                         color="Count", color_continuous_scale="Magma"),
                 use_container_width=True)
 
+            # ============================================================
+            # Diagnoses by Gender and Age Group
+            # ============================================================
             if not flt.empty and "Gender" in flt.columns:
-                merged = cons.merge(flt[["Id", "Gender", "Age Group"]],
-                                     left_on="Patient Id", right_on="Id",
-                                     how="left", suffixes=("", "_p"))
+                merged = dx_df.merge(
+                    flt[["Id", "Gender", "Age Group"]],
+                    left_on="Patient Id", right_on="Id",
+                    how="left", suffixes=("", "_p"))
                 top10 = top.head(10)["Diagnosis"].tolist()
                 sub = merged[merged["Diagnosis"].isin(top10)]
 
-                if "Gender" in merged.columns:
+                if "Gender" in sub.columns and sub["Gender"].notna().any():
                     ct = sub.groupby(["Diagnosis", "Gender"]).size().reset_index(name="Count")
                     if not ct.empty:
                         st.plotly_chart(
@@ -417,7 +463,7 @@ with tab2:
                                     color_discrete_sequence=px.colors.qualitative.Set2),
                             use_container_width=True)
 
-                if "Age Group" in merged.columns:
+                if "Age Group" in sub.columns and sub["Age Group"].notna().any():
                     ct2 = sub.groupby(["Diagnosis", "Age Group"]).size().reset_index(name="Count")
                     if not ct2.empty:
                         st.plotly_chart(
@@ -427,6 +473,9 @@ with tab2:
                                     color_discrete_sequence=px.colors.qualitative.Vivid),
                             use_container_width=True)
 
+        # ============================================================
+        # Referral Distribution
+        # ============================================================
         refs = [c for c in ["Refer To Pharmacy", "Refer To Laboratory",
                              "Refer To Optician", "Refer To Specialist"]
                 if c in cons.columns]
@@ -443,6 +492,9 @@ with tab2:
                         color_discrete_sequence=px.colors.qualitative.Prism),
                 use_container_width=True)
 
+        # ============================================================
+        # Consultations by Hour
+        # ============================================================
         if "Created At" in cons.columns and cons["Created At"].notna().any():
             c2 = cons.copy()
             c2["_dt"] = pd.to_datetime(c2["Created At"], errors="coerce")
@@ -454,6 +506,9 @@ with tab2:
                         color_discrete_sequence=["#f4a261"]),
                 use_container_width=True)
 
+        # ============================================================
+        # Staff Workload
+        # ============================================================
         if "Created By Id" in cons.columns:
             sw = cons["Created By Id"].value_counts().head(15).reset_index()
             sw.columns = ["Staff ID", "Consultations"]
@@ -1189,9 +1244,20 @@ CLOUD_MODEL   = "gpt-oss:20b"
                     f"- Age groups: "
                     f"{flt['Age Group'].value_counts().sort_index().to_dict()}"
                 )
-            if not cons.empty and "Diagnosis" in cons.columns:
-                top_dx = cons["Diagnosis"].value_counts().head(10)
-                lines.append(f"- Top 10 diagnoses: {top_dx.to_dict()}")
+            if not cons.empty:
+                diag_col = "Diagnosis_Clean" if "Diagnosis_Clean" in cons.columns else "Diagnosis"
+                if diag_col in cons.columns:
+                    # Explode to count each diagnosis separately
+                    dx_list = []
+                    for cell in cons[diag_col].dropna():
+                        for d in str(cell).split(" | "):
+                            d = d.strip()
+                            if d:
+                                dx_list.append(d)
+                    if dx_list:
+                        from collections import Counter
+                        top_dx = dict(Counter(dx_list).most_common(10))
+                        lines.append(f"- Top 10 diagnoses: {top_dx}")
             if not lab.empty and "Malaria Parasite" in lab.columns:
                 pos = lab["Malaria Parasite"].astype(str).str.lower().isin(
                     ["positive", "pos", "reactive", "+", "1", "true"]
